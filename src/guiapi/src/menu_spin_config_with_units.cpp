@@ -25,3 +25,4 @@ const SpinConfig_U08_t SpinCnf::volume_range = { { 0, 11, 1 }, None, spin_off_op
 const SpinConfig_U08_t SpinCnf::footer_center_N_range = { { 0, 5, 1 }, None, spin_off_opt_t::yes };
 const std::array<SpinConfig_I16_t, MenuVars::AXIS_CNT> SpinCnf::axis_ranges = { { SpinConfig_I16_t(MenuVars::axis_ranges[0], mm), SpinConfig_I16_t(MenuVars::axis_ranges[1], mm),
     SpinConfig_I16_t(MenuVars::axis_ranges[2], mm), SpinConfig_I16_t(MenuVars::axis_ranges[3], mm) } };
+const SpinConfig_t<float> SpinCnf::skew_range = { { -1.0, 1.0, 0.0001 }, None, spin_off_opt_t::yes };

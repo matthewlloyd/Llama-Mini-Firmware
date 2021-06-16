@@ -20,4 +20,6 @@ struct SpinCnf {
     static const SpinConfig_I08_t sensor_range;
     static const SpinConfig_U08_t footer_center_N_range;
     static const std::array<SpinConfig_I16_t, MenuVars::AXIS_CNT> axis_ranges;
+    static const SpinConfig_t<float> skew_range;
+    static const SpinConfig_t<float> esteps_range;
 };

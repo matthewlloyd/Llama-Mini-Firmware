@@ -209,3 +209,13 @@ MI_FOOTER_SETTINGS::MI_FOOTER_SETTINGS()
 void MI_FOOTER_SETTINGS::click(IWindowMenu & /*window_menu*/) {
     Screens::Access()->Open(GetScreenMenuFooterSettings);
 }
+
+/*****************************************************************************/
+//MI_LLAMA_SETTINGS
+MI_LLAMA_SETTINGS::MI_LLAMA_SETTINGS()
+    : WI_LABEL_t(_(label), 0, is_enabled_t::yes, is_hidden_t::no) {
+}
+
+void MI_LLAMA_SETTINGS::click(IWindowMenu & /*window_menu*/) {
+    Screens::Access()->Open(GetScreenMenuLlamaSettings);
+}

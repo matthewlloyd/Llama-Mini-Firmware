@@ -11,12 +11,8 @@
 #include "cmath_ext.h"
 
 static const constexpr uint8_t EEPROM__PADDING = 4;
-static const constexpr uint8_t EEPROM_MAX_NAME = 16;               // maximum name length (with '\0')
 static const constexpr uint16_t EEPROM_MAX_DATASIZE = 256;         // maximum datasize
 static const constexpr uint16_t EEPROM_FIRST_VERSION_CRC = 0x0004; // first eeprom version with crc support
-
-// flags will be used also for selective variable reset default values in some cases (shipping etc.))
-static const constexpr uint16_t EEVAR_FLG_READONLY = 0x0001; // variable is read only
 
 // measure time needed to update crc
 //#define EEPROM_MEASURE_CRC_TIME
@@ -38,14 +34,6 @@ static_assert(sizeof(Sheet) == EEPROM_SHEET_SIZEOF, "Sizeof(Sheets) is not EEPRO
 #endif
 // this pragma pack must remain intact, the ordering of EEPROM variables is not alignment-friendly
 #pragma pack(push, 1)
-
-// eeprom map entry structure
-typedef struct _eeprom_entry_t {
-    const char name[EEPROM_MAX_NAME];
-    uint8_t type;   // variant8 data type
-    uint8_t count;  // number of elements
-    uint16_t flags; // flags
-} eeprom_entry_t;
 
 // eeprom vars structure (used for defaults)
 typedef struct _eeprom_vars_t {
@@ -288,9 +276,10 @@ variant8_t eeprom_get_var(uint8_t id) {
     uint16_t data_size;
     void *data_ptr;
     variant8_t var = variant8_empty();
+    const eeprom_entry_t *map = eeprom_map;
     if (id < EEPROM_VARCOUNT) {
         eeprom_lock();
-        var = variant8_init(eeprom_map[id].type, eeprom_map[id].count, 0);
+        var = variant8_init(map[id].type, map[id].count, 0);
         size = eeprom_var_size(id);
         data_size = variant8_data_size(&var);
         if (size == data_size) {
@@ -322,7 +311,8 @@ void eeprom_set_var(uint8_t id, variant8_t var) {
         }
 #endif
         eeprom_lock();
-        if (variant8_get_type(var) == eeprom_map[id].type) {
+        const eeprom_entry_t *map = eeprom_map;
+        if (variant8_get_type(var) == map[id].type) {
             size = eeprom_var_size(id);
             data_size = variant8_data_size(&var);
             if ((size == data_size) || ((variant8_get_type(var) == VARIANT8_PCHAR) && (data_size <= size))) {

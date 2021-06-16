@@ -29,6 +29,7 @@
 #include "crc32.h"
 #include "ff.h"
 #include "dump.h"
+#include "llama.h"
 
 #include <Arduino.h>
 #include "trinamic.h"

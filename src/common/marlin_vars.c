@@ -40,7 +40,11 @@ const char *__var_name[] = {
     "FAN0_RPM",
     "FAN1_RPM",
     "FAN_CHECK_ENABLED",
-    "FS_AUTOLOAD_ENABLED"
+    "FS_AUTOLOAD_ENABLED",
+    "SKEW_XY",
+    "SKEW_XZ",
+    "SKEW_YZ",
+    "ESTEPS"
 };
 
 static_assert((sizeof(__var_name) / sizeof(char *)) == (MARLIN_VAR_MAX + 1), "Invalid number of elements in __var_name");
@@ -131,6 +135,14 @@ variant8_t marlin_vars_get_var(marlin_vars_t *vars, uint8_t var_id) {
         return variant8_ui8(vars->fan_check_enabled);
     case MARLIN_VAR_FS_AUTOLOAD_ENABLED:
         return variant8_ui8(vars->fs_autoload_enabled);
+    case MARLIN_VAR_ESTEPS:
+        return variant8_flt(vars->esteps);
+    case MARLIN_VAR_SKEW_XY:
+        return variant8_flt(vars->skew_xy);
+    case MARLIN_VAR_SKEW_XZ:
+        return variant8_flt(vars->skew_xz);
+    case MARLIN_VAR_SKEW_YZ:
+        return variant8_flt(vars->skew_yz);
     }
     return variant8_empty();
 }
@@ -252,6 +264,18 @@ void marlin_vars_set_var(marlin_vars_t *vars, uint8_t var_id, variant8_t var) {
     case MARLIN_VAR_FS_AUTOLOAD_ENABLED:
         vars->fs_autoload_enabled = variant_get_ui8(var);
         break;
+    case MARLIN_VAR_ESTEPS:
+        vars->esteps = variant8_get_flt(var);
+        break;
+    case MARLIN_VAR_SKEW_XY:
+        vars->skew_xy = variant8_get_flt(var);
+        break;
+    case MARLIN_VAR_SKEW_XZ:
+        vars->skew_xz = variant8_get_flt(var);
+        break;
+    case MARLIN_VAR_SKEW_YZ:
+        vars->skew_yz = variant8_get_flt(var);
+        break;
     }
 }
 
@@ -322,6 +346,14 @@ int marlin_vars_value_to_str(marlin_vars_t *vars, uint8_t var_id, char *str, uns
         return snprintf(str, size, "%u", (unsigned int)(vars->fan_check_enabled));
     case MARLIN_VAR_FS_AUTOLOAD_ENABLED:
         return snprintf(str, size, "%u", (unsigned int)(vars->fs_autoload_enabled));
+    case MARLIN_VAR_ESTEPS:
+        return snprintf(str, size, "%f", (double)(vars->esteps));
+    case MARLIN_VAR_SKEW_XY:
+        return snprintf(str, size, "%+.4f", (double)(vars->skew_xy));
+    case MARLIN_VAR_SKEW_XZ:
+        return snprintf(str, size, "%+.4f", (double)(vars->skew_xz));
+    case MARLIN_VAR_SKEW_YZ:
+        return snprintf(str, size, "%+.4f", (double)(vars->skew_yz));
     default:
         return snprintf(str, size, "???");
     }
@@ -395,6 +427,12 @@ int marlin_vars_str_to_value(marlin_vars_t *vars, uint8_t var_id, const char *st
         return sscanf(str, "%hhu", &(vars->fan_check_enabled));
     case MARLIN_VAR_FS_AUTOLOAD_ENABLED:
         return sscanf(str, "%hhu", &(vars->fs_autoload_enabled));
+    case MARLIN_VAR_SKEW_XY:
+        return sscanf(str, "%f", &(vars->skew_xy));
+    case MARLIN_VAR_SKEW_XZ:
+        return sscanf(str, "%f", &(vars->skew_xz));
+    case MARLIN_VAR_SKEW_YZ:
+        return sscanf(str, "%f", &(vars->skew_yz));
     }
     return 0;
 }

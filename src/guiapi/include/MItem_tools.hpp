@@ -415,3 +415,72 @@ public:
     MI_FS_AUTOLOAD();
     virtual void OnChange(size_t old_index) override;
 };
+
+class MI_EXTRUDER_TYPE : public WI_SWITCH_t<4> {
+    constexpr static const char *const label = "Extruder";
+
+    constexpr static const char *str_Prusa = "Prusa";
+    constexpr static const char *str_Bondtech = "Bondtech";
+    constexpr static const char *str_BondtechReversed = "Bond-Rev";
+    constexpr static const char *str_UserUseM92 = "Custom";
+
+public:
+    MI_EXTRUDER_TYPE();
+    virtual void OnChange(size_t old_index) override;
+};
+
+class MI_EXTRUDER_ESTEPS : public WI_SPIN_FL_t {
+    constexpr static const char *const label = N_("E-Steps");
+
+public:
+    MI_EXTRUDER_ESTEPS();
+    virtual void OnClick() override;
+};
+
+class MI_HOTEND_FAN_SPEED : public WI_SWITCH_t<7> {
+    constexpr static const char *const label = "Hotend Fan";
+
+    constexpr static const char *str_Default = "Default";
+    constexpr static const char *str_50 = "50%";
+    constexpr static const char *str_60 = "60%";
+    constexpr static const char *str_70 = "70%";
+    constexpr static const char *str_80 = "80%";
+    constexpr static const char *str_90 = "90%";
+    constexpr static const char *str_100 = "100%";
+
+public:
+    MI_HOTEND_FAN_SPEED();
+    virtual void OnChange(size_t old_index) override;
+};
+
+class MI_SKEW_ENABLED : public WI_SWITCH_OFF_ON_t {
+    constexpr static const char *const label = N_("Skew Correct");
+
+public:
+    MI_SKEW_ENABLED();
+    virtual void OnChange(size_t old_index) override;
+};
+
+class MI_SKEW_XY : public WI_SPIN_FL_t {
+    constexpr static const char *const label = N_("Skew XY");
+
+public:
+    MI_SKEW_XY();
+    virtual void OnClick() override;
+};
+
+class MI_SKEW_XZ : public WI_SPIN_FL_t {
+    constexpr static const char *const label = N_("Skew XZ");
+
+public:
+    MI_SKEW_XZ();
+    virtual void OnClick() override;
+};
+
+class MI_SKEW_YZ : public WI_SPIN_FL_t {
+    constexpr static const char *const label = N_("Skew YZ");
+
+public:
+    MI_SKEW_YZ();
+    virtual void OnClick() override;
+};

@@ -23,6 +23,8 @@
 #include "hwio_pindef.h"
 #include "menu_spin_config.hpp"
 #include "DialogSelftestResult.hpp"
+#include "extruder_enum.h"
+#include "llama.h"
 
 /*****************************************************************************/
 //MI_WIZARD
@@ -499,4 +501,76 @@ void MI_FS_AUTOLOAD::OnChange(size_t old_index) {
         marlin_set_var(MARLIN_VAR_FS_AUTOLOAD_ENABLED, variant8_ui8(0));
     }
     eeprom_set_var(EEVAR_FS_AUTOLOAD_ENABLED, variant8_ui8(marlin_get_var(MARLIN_VAR_FS_AUTOLOAD_ENABLED)));
+}
+
+/*****************************************************************************/
+//MI_EXTRUDER_TYPE
+MI_EXTRUDER_TYPE::MI_EXTRUDER_TYPE()
+    : WI_SWITCH_t<4>(variant_get_ui8(eeprom_llama_get_var(EEVAR_LLAMA_EXTRUDER_TYPE)), _(label), 0, is_enabled_t::yes, is_hidden_t::no,
+                     _(str_Prusa), _(str_Bondtech), _(str_BondtechReversed), _(str_UserUseM92)) {}
+void MI_EXTRUDER_TYPE::OnChange(size_t old_type) {
+    eeprom_llama_set_var(EEVAR_LLAMA_EXTRUDER_TYPE, variant8_ui8(index), true);
+    llama_apply_extruder_settings();
+    Screens::Access()->Get()->WindowEvent(nullptr, GUI_event_t::CHILD_CLICK, (void *) 0);
+}
+
+/*****************************************************************************/
+//MI_EXTRUDER_ESTEPS
+MI_EXTRUDER_ESTEPS::MI_EXTRUDER_ESTEPS()
+    : WI_SPIN_FL_t(
+        llama_compute_extruder_esteps(),
+        SpinCnf::esteps_range, _(label), 0,
+        variant_get_ui8(eeprom_llama_get_var(EEVAR_LLAMA_EXTRUDER_TYPE)) == eEXTRUDER_TYPE::EXTRUDER_TYPE_USER_USE_M92 ? is_enabled_t::yes : is_enabled_t::no,
+        is_hidden_t::no) {
+    prt_format = (const char*) "%.0f";
+}
+void MI_EXTRUDER_ESTEPS::OnClick() {
+    eeprom_llama_set_var(EEVAR_LLAMA_EXTRUDER_ESTEPS, variant8_flt(GetVal()), true);
+    llama_apply_extruder_settings();
+}
+
+/*****************************************************************************/
+//MI_HOTEND_FAN_SPEED
+MI_HOTEND_FAN_SPEED::MI_HOTEND_FAN_SPEED()
+    : WI_SWITCH_t<7>(variant_get_ui8(eeprom_llama_get_var(EEVAR_LLAMA_HOTEND_FAN_SPEED)), _(label), 0, is_enabled_t::yes, is_hidden_t::no,
+                     _(str_Default), _(str_50), _(str_60), _(str_70), _(str_80), _(str_90), _(str_100)) {}
+void MI_HOTEND_FAN_SPEED::OnChange(size_t old_type) {
+    eeprom_llama_set_var(EEVAR_LLAMA_HOTEND_FAN_SPEED, variant8_ui8(index), true);
+    llama_apply_fan_settings();
+}
+
+/*****************************************************************************/
+//MI_SKEW_ENABLED
+MI_SKEW_ENABLED::MI_SKEW_ENABLED()
+    : WI_SWITCH_OFF_ON_t(variant_get_ui8(eeprom_llama_get_var(EEVAR_LLAMA_SKEW_ENABLED)), _(label), 0, is_enabled_t::yes, is_hidden_t::no) {}
+void MI_SKEW_ENABLED::OnChange(size_t old_index) {
+    eeprom_llama_set_var(EEVAR_LLAMA_SKEW_ENABLED, variant8_ui8(index), true);
+    llama_apply_skew_settings();
+}
+
+/*****************************************************************************/
+//MI_SKEW_XY
+MI_SKEW_XY::MI_SKEW_XY()
+    : WI_SPIN_FL_t(variant8_get_flt(eeprom_llama_get_var(EEVAR_LLAMA_SKEW_XY)), SpinCnf::skew_range, _(label), 0, is_enabled_t::yes, is_hidden_t::no) {}
+void MI_SKEW_XY::OnClick() {
+    eeprom_llama_set_var(EEVAR_LLAMA_SKEW_XY, variant8_flt(GetVal()), true);
+    llama_apply_skew_settings();
+}
+
+/*****************************************************************************/
+//MI_SKEW_XZ
+MI_SKEW_XZ::MI_SKEW_XZ()
+    : WI_SPIN_FL_t(variant8_get_flt(eeprom_llama_get_var(EEVAR_LLAMA_SKEW_XZ)), SpinCnf::skew_range, _(label), 0, is_enabled_t::yes, is_hidden_t::no) {}
+void MI_SKEW_XZ::OnClick() {
+    eeprom_llama_set_var(EEVAR_LLAMA_SKEW_XZ, variant8_flt(GetVal()), true);
+    llama_apply_skew_settings();
+}
+
+/*****************************************************************************/
+//MI_SKEW_YZ
+MI_SKEW_YZ::MI_SKEW_YZ()
+    : WI_SPIN_FL_t(variant8_get_flt(eeprom_llama_get_var(EEVAR_LLAMA_SKEW_YZ)), SpinCnf::skew_range, _(label), 0, is_enabled_t::yes, is_hidden_t::no) {}
+void MI_SKEW_YZ::OnClick() {
+    eeprom_llama_set_var(EEVAR_LLAMA_SKEW_YZ, variant8_flt(GetVal()), true);
+    llama_apply_skew_settings();
 }

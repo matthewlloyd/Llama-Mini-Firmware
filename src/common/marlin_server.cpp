@@ -39,6 +39,8 @@
 #include "otp.h"
 #include "../marlin_stubs/G26.hpp"
 #include "fsm_types.hpp"
+#include "extruder_enum.h"
+#include "llama.h"
 
 static_assert(MARLIN_VAR_MAX < 64, "MarlinAPI: Too many variables");
 
@@ -289,6 +291,28 @@ int marlin_server_cycle(void) {
                 if ((msk = marlin_server.client_events[client_id]) != 0)
                     marlin_server.client_events[client_id] &= ~_send_notify_events_to_client(client_id, queue, msk);
         }
+
+    // write skew and esteps to EEPROM if changed
+    if (changes & MARLIN_VAR_MSK(MARLIN_VAR_ESTEPS)) {
+        eeprom_llama_set_var(EEVAR_LLAMA_EXTRUDER_ESTEPS, variant8_flt(marlin_server.vars.esteps), false);
+        eeprom_llama_set_var(EEVAR_LLAMA_EXTRUDER_TYPE, variant8_ui8(eEXTRUDER_TYPE::EXTRUDER_TYPE_USER_USE_M92), true);
+    }
+    if (changes & MARLIN_VAR_MSK(MARLIN_VAR_SKEW_XY)) {
+        if (marlin_server.vars.skew_xy != 0.f && variant8_ui8(eeprom_llama_get_var(EEVAR_LLAMA_SKEW_ENABLED)) == 0)
+            eeprom_llama_set_var(EEVAR_LLAMA_SKEW_ENABLED, variant8_ui8(1), false);
+        eeprom_llama_set_var(EEVAR_LLAMA_SKEW_XY, variant8_flt(marlin_server.vars.skew_xy), true);
+    }
+    if (changes & MARLIN_VAR_MSK(MARLIN_VAR_SKEW_XZ)) {
+        if (marlin_server.vars.skew_xz != 0.f && variant8_ui8(eeprom_llama_get_var(EEVAR_LLAMA_SKEW_ENABLED)) == 0)
+            eeprom_llama_set_var(EEVAR_LLAMA_SKEW_ENABLED, variant8_ui8(1), false);
+        eeprom_llama_set_var(EEVAR_LLAMA_SKEW_XZ, variant8_flt(marlin_server.vars.skew_xz), true);
+    }
+    if (changes & MARLIN_VAR_MSK(MARLIN_VAR_SKEW_YZ)) {
+        if (marlin_server.vars.skew_yz != 0.f && variant8_ui8(eeprom_llama_get_var(EEVAR_LLAMA_SKEW_ENABLED)) == 0)
+            eeprom_llama_set_var(EEVAR_LLAMA_SKEW_ENABLED, variant8_ui8(1), false);
+        eeprom_llama_set_var(EEVAR_LLAMA_SKEW_YZ, variant8_flt(marlin_server.vars.skew_yz), true);
+    }
+
     if ((marlin_server.flags & MARLIN_SFLG_PROCESS) == 0)
         wdt_iwdg_refresh(); // this prevents iwdg reset while processing disabled
     processing = 0;
@@ -406,6 +430,9 @@ void marlin_server_settings_load(void) {
 #endif
     marlin_server.vars.fan_check_enabled = variant_get_ui8(eeprom_get_var(EEVAR_FAN_CHECK_ENABLED));
     marlin_server.vars.fs_autoload_enabled = variant_get_ui8(eeprom_get_var(EEVAR_FS_AUTOLOAD_ENABLED));
+    llama_apply_fan_settings();
+    llama_apply_extruder_settings();
+    llama_apply_skew_settings();
 }
 
 void marlin_server_settings_reset(void) {
@@ -1153,6 +1180,37 @@ static uint64_t _server_update_vars(uint64_t update) {
         }
     }
 
+    if (update & MARLIN_VAR_MSK(MARLIN_VAR_ESTEPS)) {
+        if (marlin_server.vars.esteps != planner.settings.axis_steps_per_mm[3]) {
+            marlin_server.vars.esteps = planner.settings.axis_steps_per_mm[3];
+            changes |= MARLIN_VAR_MSK(MARLIN_VAR_ESTEPS);
+        }
+    }
+
+    if (update & MARLIN_VAR_MSK(MARLIN_VAR_SKEW_XY)) {
+        float skew_xy = planner.skew_factor.xy;
+        if (marlin_server.vars.skew_xy != skew_xy) {
+            marlin_server.vars.skew_xy = skew_xy;
+            changes |= MARLIN_VAR_MSK(MARLIN_VAR_SKEW_XY);
+        }
+    }
+
+    if (update & MARLIN_VAR_MSK(MARLIN_VAR_SKEW_XZ)) {
+        float skew_xz = planner.skew_factor.xz;
+        if (marlin_server.vars.skew_xz != skew_xz) {
+            marlin_server.vars.skew_xz = skew_xz;
+            changes |= MARLIN_VAR_MSK(MARLIN_VAR_SKEW_XZ);
+        }
+    }
+
+    if (update & MARLIN_VAR_MSK(MARLIN_VAR_SKEW_YZ)) {
+        float skew_yz = planner.skew_factor.yz;
+        if (marlin_server.vars.skew_yz != skew_yz) {
+            marlin_server.vars.skew_yz = skew_yz;
+            changes |= MARLIN_VAR_MSK(MARLIN_VAR_SKEW_YZ);
+        }
+    }
+
     return changes;
 }
 
@@ -1267,60 +1325,86 @@ static int _server_set_var(const char *const name_val_str) {
     if (name_val_str == nullptr)
         return 0;
     int var_id;
-    bool changed = false;
     char *val_str = strchr(name_val_str, ' ');
     *(val_str++) = 0;
     if ((var_id = marlin_vars_get_id_by_name(name_val_str)) >= 0) {
         if (marlin_vars_str_to_value(&(marlin_server.vars), var_id, val_str) == 1) {
-            switch (var_id) {
-            case MARLIN_VAR_TTEM_NOZ:
-                changed = (thermalManager.temp_hotend[0].target != marlin_server.vars.target_nozzle);
-                thermalManager.setTargetHotend(marlin_server.vars.target_nozzle, 0);
-                break;
-            case MARLIN_VAR_TTEM_BED:
-                changed = (thermalManager.temp_bed.target != marlin_server.vars.target_bed);
-                thermalManager.setTargetBed(marlin_server.vars.target_bed);
-                break;
-            case MARLIN_VAR_Z_OFFSET:
-#if HAS_BED_PROBE
-                changed = (probe_offset.z != marlin_server.vars.z_offset);
-                probe_offset.z = marlin_server.vars.z_offset;
-#endif //HAS_BED_PROBE
-                break;
-            case MARLIN_VAR_FANSPEED:
-#if FAN_COUNT > 0
-                changed = (thermalManager.fan_speed[0] != marlin_server.vars.fan_speed);
-                thermalManager.set_fan_speed(0, marlin_server.vars.fan_speed);
-#endif
-                break;
-            case MARLIN_VAR_PRNSPEED:
-                changed = (feedrate_percentage != (int16_t)marlin_server.vars.print_speed);
-                feedrate_percentage = (int16_t)marlin_server.vars.print_speed;
-                break;
-            case MARLIN_VAR_FLOWFACT:
-                changed = (planner.flow_percentage[0] != (int16_t)marlin_server.vars.flow_factor);
-                planner.flow_percentage[0] = (int16_t)marlin_server.vars.flow_factor;
-                planner.refresh_e_factor(0);
-                break;
-            case MARLIN_VAR_WAITHEAT:
-                changed = true;
-                wait_for_heatup = marlin_server.vars.wait_heat ? true : false;
-                break;
-            case MARLIN_VAR_WAITUSER:
-                changed = true;
-                wait_for_user = marlin_server.vars.wait_user ? true : false;
-                break;
-            }
-            if (changed) {
-                int client_id;
-                uint64_t var_msk = MARLIN_VAR_MSK(var_id);
-                for (client_id = 0; client_id < MARLIN_MAX_CLIENTS; client_id++)
-                    marlin_server.client_changes[client_id] |= (var_msk & marlin_server.notify_changes[client_id]);
-            }
+            marlin_server_handle_var_change(var_id);
         }
     }
-    //	_dbg("_server_set_var %d %s %s", var_id, name_val_str, val_str);
     return 1;
+}
+
+void marlin_server_handle_var_change(int var_id) {
+    bool changed = false;
+    switch (var_id) {
+    case MARLIN_VAR_TTEM_NOZ:
+        changed = (thermalManager.temp_hotend[0].target != marlin_server.vars.target_nozzle);
+        thermalManager.setTargetHotend(marlin_server.vars.target_nozzle, 0);
+        break;
+    case MARLIN_VAR_TTEM_BED:
+        changed = (thermalManager.temp_bed.target != marlin_server.vars.target_bed);
+        thermalManager.setTargetBed(marlin_server.vars.target_bed);
+        break;
+    case MARLIN_VAR_Z_OFFSET:
+#if HAS_BED_PROBE
+        changed = (probe_offset.z != marlin_server.vars.z_offset);
+        probe_offset.z = marlin_server.vars.z_offset;
+#endif //HAS_BED_PROBE
+        break;
+    case MARLIN_VAR_FANSPEED:
+#if FAN_COUNT > 0
+        changed = (thermalManager.fan_speed[0] != marlin_server.vars.fan_speed);
+        thermalManager.set_fan_speed(0, marlin_server.vars.fan_speed);
+#endif
+        break;
+    case MARLIN_VAR_PRNSPEED:
+        changed = (feedrate_percentage != (int16_t)marlin_server.vars.print_speed);
+        feedrate_percentage = (int16_t)marlin_server.vars.print_speed;
+        break;
+    case MARLIN_VAR_FLOWFACT:
+        changed = (planner.flow_percentage[0] != (int16_t)marlin_server.vars.flow_factor);
+        planner.flow_percentage[0] = (int16_t)marlin_server.vars.flow_factor;
+        planner.refresh_e_factor(0);
+        break;
+    case MARLIN_VAR_WAITHEAT:
+        changed = true;
+        wait_for_heatup = marlin_server.vars.wait_heat ? true : false;
+        break;
+    case MARLIN_VAR_WAITUSER:
+        changed = true;
+        wait_for_user = marlin_server.vars.wait_user ? true : false;
+        break;
+    case MARLIN_VAR_ESTEPS:
+        changed = true;
+        planner.settings.axis_steps_per_mm[3] = marlin_server.vars.esteps;
+        planner.refresh_positioning();
+        break;
+    case MARLIN_VAR_SKEW_XY:
+    case MARLIN_VAR_SKEW_XZ:
+    case MARLIN_VAR_SKEW_YZ:
+        switch (var_id) {
+            case MARLIN_VAR_SKEW_XY:
+                planner.skew_factor.xy = marlin_server.vars.skew_xy;
+                break;
+            case MARLIN_VAR_SKEW_XZ:
+                planner.skew_factor.xz = marlin_server.vars.skew_xz;
+                break;
+            case MARLIN_VAR_SKEW_YZ:
+                planner.skew_factor.yz = marlin_server.vars.skew_yz;
+                break;
+        }
+        // When skew is changed the current position changes
+        set_current_from_steppers_for_axis(ALL_AXES);
+        sync_plan_position();
+        break;
+    }
+    if (changed) {
+        int client_id;
+        uint64_t var_msk = MARLIN_VAR_MSK(var_id);
+        for (client_id = 0; client_id < MARLIN_MAX_CLIENTS; client_id++)
+            marlin_server.client_changes[client_id] |= (var_msk & marlin_server.notify_changes[client_id]);
+    }
 }
 
 // update variables defined by 'update' mask and send notification to client that requested updating

@@ -1,6 +1,7 @@
 // marlin_client.h
 #pragma once
 
+#include <stdbool.h>
 #include "marlin_events.h"
 #include "marlin_vars.h"
 #include "marlin_errors.h"
@@ -192,6 +193,8 @@ extern int marlin_reheating(void);
 
 // radio button click
 extern void marlin_encoded_response(uint32_t enc_phase_and_response);
+
+extern bool marlin_is_client_thread();
 #ifdef __cplusplus
 }
 #endif //__cplusplus

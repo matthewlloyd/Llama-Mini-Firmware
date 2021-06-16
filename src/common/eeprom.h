@@ -91,6 +91,19 @@ enum {
     LAN_EEFLG_TYPE = 2,  //EEPROM flag for user-defined settings (Switch between dhcp and static)
 };
 
+#define EEPROM_MAX_NAME (16)               // maximum name length (with '\0')
+
+// flags will be used also for selective variable reset default values in some cases (shipping etc.))
+#define EEVAR_FLG_READONLY (0x0001) // variable is read only
+
+// eeprom map entry structure
+typedef struct _eeprom_entry_t {
+    const char name[EEPROM_MAX_NAME];
+    uint8_t type;   // variant8 data type
+    uint8_t count;  // number of elements
+    uint16_t flags; // flags
+} eeprom_entry_t;
+
 #define SelftestResult_Unknown 0
 #define SelftestResult_Skipped 1
 #define SelftestResult_Passed  2

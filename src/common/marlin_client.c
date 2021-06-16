@@ -538,6 +538,18 @@ uint8_t marlin_set_wait_user(uint8_t val) {
     return variant_get_ui8(marlin_set_var(MARLIN_VAR_WAITUSER, variant8_ui8(val)));
 }
 
+float marlin_set_skew_xy(float val) {
+    return variant8_get_flt(marlin_set_var(MARLIN_VAR_SKEW_XY, variant8_flt(val)));
+}
+
+float marlin_set_skew_xz(float val) {
+    return variant8_get_flt(marlin_set_var(MARLIN_VAR_SKEW_XZ, variant8_flt(val)));
+}
+
+float marlin_set_skew_yz(float val) {
+    return variant8_get_flt(marlin_set_var(MARLIN_VAR_SKEW_YZ, variant8_flt(val)));
+}
+
 void marlin_do_babysteps_Z(float offs) {
     char request[MARLIN_MAX_REQUEST];
     marlin_client_t *client = _client_ptr();
@@ -875,4 +887,8 @@ static marlin_client_t *_client_ptr(void) {
         if (taskHandle == marlin_client_task[client_id])
             return marlin_client + client_id;
     return 0;
+}
+
+bool marlin_is_client_thread() {
+    return _client_ptr() != NULL;
 }
