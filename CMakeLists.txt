@@ -557,6 +557,7 @@ target_sources(
           src/common/llama.cpp
           $<$<STREQUAL:${PRINTER},MINI>:src/common/minda_broken_cable_detection.cpp>
           $<$<STREQUAL:${PRINTER},MINI>:src/common/MindaRedscreen.cpp>
+          src/marlin_stubs/M300.cpp
           src/marlin_stubs/M330.cpp
           src/marlin_stubs/M50.cpp
           src/hw/buffered_serial.cpp
