@@ -8,4 +8,4 @@
 
 #pragma once
 
-#define WUI_HOST_NAME "Prusa Mini"
+#define WUI_HOST_NAME "Llama Mini"

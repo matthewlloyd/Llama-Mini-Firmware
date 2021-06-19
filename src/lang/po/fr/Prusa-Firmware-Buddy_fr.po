@@ -298,8 +298,8 @@ msgid "Heating..."
 msgstr "En chauffe..."
 
 #: src/gui/guimain.cpp:205
-msgid "Hi, this is your\nOriginal Prusa MINI."
-msgstr "Bonjour, voici votre\nOriginal Prusa MINI."
+msgid "Hi, this is your\nOriginal Llama MINI."
+msgstr "Bonjour, voici votre\nOriginal Llama MINI."
 
 #: src/gui/screen_home.cpp:68
 msgid "HOME"
@@ -1048,8 +1048,8 @@ msgid "Wed"
 msgstr "mer"
 
 #: src/gui/wizard/screen_wizard.cpp:127
-msgid "Welcome to the Original Prusa MINI setup wizard. Would you like to continue?"
-msgstr "Bienvenue sur l'assistant de configuration de l'Original Prusa MINI. Voulez-vous continuer ?"
+msgid "Welcome to the Original Llama MINI setup wizard. Would you like to continue?"
+msgstr "Bienvenue sur l'assistant de configuration de l'Original Llama MINI. Voulez-vous continuer ?"
 
 #: src/guiapi/include/MItem_tools.hpp:9
 msgid "Wizard"
