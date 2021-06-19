@@ -376,7 +376,7 @@ TEST_CASE("multi-line", "[text_wrap]") {
             std::make_tuple<std::string, size_t, std::string>(
                 "Heating disabled due to 30 minutes of inactivity.", 3, "Heating disabled due\nto 30 minutes of\ninactivity."),
             std::make_tuple<std::string, size_t, std::string>(
-                "Hi, this is your Original Prusa MINI.", 2, "Hi, this is your\nOriginal Prusa MINI."),
+                "Hi, this is your Original Llama MINI.", 2, "Hi, this is your\nOriginal Llama MINI."),
             std::make_tuple<std::string, size_t, std::string>(
                 "In the next step, use the knob to adjust the nozzle height. Check the pictures in the handbook for reference.", 7, "In the next step,\nuse the knob to\nadjust the nozzle\nheight. Check the\npictures in the\nhandbook for\nreference."),
             std::make_tuple<std::string, size_t, std::string>(
@@ -448,7 +448,7 @@ TEST_CASE("multi-line", "[text_wrap]") {
             std::make_tuple<std::string, size_t, std::string>(
                 "USB Disk is Write protected!", 2, "USB Disk is Write\nprotected!"),
             std::make_tuple<std::string, size_t, std::string>(
-                "Welcome to the Original Prusa MINI setup wizard. Would you like to continue?", 5, "Welcome to the\nOriginal Prusa MINI\nsetup wizard. Would\nyou like to\ncontinue?"),
+                "Welcome to the Original Prusa MINI setup wizard. Would you like to continue?", 5, "Welcome to the\nOriginal Llama MINI\nsetup wizard. Would\nyou like to\ncontinue?"),
             std::make_tuple<std::string, size_t, std::string>(
                 "Check the print head heater & thermistor\nwiring for possible damage.", 4, "Check the print head\nheater & thermistor\nwiring for possible\ndamage."),
             std::make_tuple<std::string, size_t, std::string>(
