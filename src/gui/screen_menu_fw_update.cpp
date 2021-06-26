@@ -24,10 +24,11 @@ protected:
     virtual void click(IWindowMenu &window_menu) override {};
 };
 
-class MI_UPDATE : public WI_SWITCH_t<3> {
+class MI_UPDATE : public WI_SWITCH_t<4> {
     constexpr static const char *const str_0 = N_("Off");
     constexpr static const char *const str_1 = N_("On Restart");
     constexpr static const char *const str_2 = N_("Always");
+    constexpr static const char *const str_3 = N_("On Restart Older");
 
     size_t init_index() const;
 
@@ -39,6 +40,7 @@ protected:
 };
 
 size_t MI_UPDATE::init_index() const {
+    if (sys_fw_update_older_on_restart_is_enabled()) return 3;
     return (size_t)sys_fw_update_on_restart_is_enabled()
         ? 1
         : sys_fw_update_is_enabled()
@@ -47,7 +49,7 @@ size_t MI_UPDATE::init_index() const {
 }
 
 MI_UPDATE::MI_UPDATE()
-    : WI_SWITCH_t<3>(init_index(), string_view_utf8::MakeNULLSTR(), 0, is_enabled_t::yes, is_hidden_t::no, _(str_0), _(str_1), _(str_2)) {
+    : WI_SWITCH_t<4>(init_index(), string_view_utf8::MakeNULLSTR(), 0, is_enabled_t::yes, is_hidden_t::no, _(str_0), _(str_1), _(str_2), _(str_3)) {
 }
 
 void MI_UPDATE::OnChange(size_t /*old_index*/) {
@@ -57,6 +59,9 @@ void MI_UPDATE::OnChange(size_t /*old_index*/) {
     } else if (index == 2) {
         sys_fw_update_on_restart_disable();
         sys_fw_update_enable();
+    } else if (index == 3) {
+        sys_fw_update_older_on_restart_enable();
+        sys_fw_update_disable();
     } else if (index == 0) {
         sys_fw_update_on_restart_disable();
         sys_fw_update_disable();
