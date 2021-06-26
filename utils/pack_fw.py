@@ -76,7 +76,7 @@ def write_version(ver, *, build_number: int):
     for it in ("major", "minor", "patch"):
         data += getattr(ver, it).to_bytes(1, 'little')
     data += build_number.to_bytes(2, 'little')
-    data += ver.prerelease.ljust(5, '\0').encode()
+    data += ver.prerelease[:5].ljust(5, '\0').encode()
     return data
 
 
