@@ -257,9 +257,16 @@ void sys_fw_update_disable(void) {
 int sys_fw_update_on_restart_is_enabled(void) {
     return (FW_UPDATE_ENABLE == ram_data_exchange.fw_update_flag) ? 1 : 0;
 }
+int sys_fw_update_older_on_restart_is_enabled(void) {
+    return (FW_UPDATE_OLDER == ram_data_exchange.fw_update_flag) ? 1 : 0;
+}
 
 void sys_fw_update_on_restart_enable(void) {
     ram_data_exchange.fw_update_flag = FW_UPDATE_ENABLE;
+}
+
+void sys_fw_update_older_on_restart_enable(void) {
+    ram_data_exchange.fw_update_flag = FW_UPDATE_OLDER;
 }
 
 void sys_fw_update_on_restart_disable(void) {
