@@ -1,3 +1,215 @@
+# ![Llama Mini](doc/llama/logo.png)
+
+# Llama Mini
+
+[![Version](https://img.shields.io/github/v/release/matthewlloyd/Llama-Mini-Firmware?color=brightgreen&include_prereleases)]()
+
+### Unofficial Firmware for the Prusa Mini and Mini+
+
+One of Prusa's llamas escaped from HQ (:llama::running_man:) and decided to make his
+own version of the firmware for the Prusa Mini. He's added quite
+a few goodies:
+
+* **Configurable E-steps**: Adds a menu option to configure e-steps, with presets for the
+  Bondtech extruder (with and without reversed wires).
+* **Hotend fan speed**: Adds a menu option to unlock the hotend fan speed
+  and increase it from the Prusa Firmware's default 38% to anywhere from 50-100%.
+* **Skew compensation**: Turns on skew compensation in Marlin and allows it
+  to be configured directly through the Settings menu or with `M852`.
+* **OctoPrint screen**: Adds support for `M73` (print progress) and `M117`
+  (LCD messages).
+* **Sound**: Adds support for `M300` (play a sound).
+
+All settings are automatically saved to EEPROM and loaded on boot.
+
+![Welcome](doc/llama/screenshot-welcome.jpg)
+![Main](doc/llama/screenshot-main.jpg)
+![Settings](doc/llama/screenshot-settings.jpg)
+![Llama Settings](doc/llama/screenshot-llama-settings.jpg)
+![E-Steps](doc/llama/screenshot-esteps.jpg)
+![Octoprint](doc/llama/screenshot-octoprint.jpg)
+
+#### Feed the Llama
+
+This plugin is developed in my spare time. If you like it, please
+consider supporting further development and updates by making a donation.
+
+[![Feed the Llama](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/donate?business=HPGUMVJFSCXZ4&no_recurring=0&currency_code=USD)
+
+---
+
+## Installing Livestock
+
+### Jailbreak your Mini
+
+You will need to cut out Prusa's appendix to install custom firmware.
+Follow the instructions [here](https://help.prusa3d.com/en/article/flashing-custom-firmware-mini_14/).
+This is irreversible and voids the warranty, although in the US
+you are protected by the [Magnuson-Moss Warranty Act](https://www.ftc.gov/news-events/press-releases/2018/04/ftc-staff-warns-companies-it-illegal-condition-warranty-coverage).
+
+Of course you could always buy a second Buddy board and let your Llama
+run wild on that instead.
+
+Alternatively, if you are good at very fine pitch soldering, you could
+lift the BOOT0 pin off the board entirely and make your own jumpers
+to connect it directly to 3.3V or GND as you need (the appendix merely
+[shorts BOOT0 directly to GND](https://hackaday.com/2019/12/16/prusa-dares-you-to-break-their-latest-printer/)).
+
+Once you have done that, you can live and let live-stock.
+
+
+### Flash Llama
+
+Download the latest release [here](https://github.com/matthewlloyd/Llama-Mini-Firmware/releases).
+Copy the `.bbf` file to the root of your USB flash drive.
+Follow the instructions [here](https://help.prusa3d.com/en/guide/how-to-update-firmware-mini-mini_128421/)
+to install the firmware. The bootloader will warn you the signature is
+incorrect - select "Ignore".
+
+### Livestock to Stock
+
+Download Prusa's stock firmware [here](https://www.prusa3d.com/drivers/).
+The bootloader might not let you downgrade the firmware unless you
+explicitly give permission. Go to the Settings menu, scroll down to "FW Upgrade",
+and change the option to "On Restart Older" (this option is only available
+in Llama firmware).
+
+---
+
+## Configuration
+
+To configure Llama settings, open the Settings menu and select "Llama Settings".
+Llogical!
+
+### Configuring E-steps
+
+Select "Extruder" and click to select one of:
+
+- **Prusa**. Stock e-steps for the stock extruder.
+- **Bondtech**. Preset e-steps for the [Bondtech extruder upgrade](https://www.bondtech.se/product/prusa-mini/).
+  This option assumes you have reversed the motor wiring as per Bondtech's instructions.
+- **Bond-Rev**. Also preset e-steps for the [Bondtech extruder upgrade](https://www.bondtech.se/product/prusa-mini/),
+  but this option uses negative e-steps so you don't need to reverse the motor wiring.
+- **Custom**. The e-steps can be configured using the jog wheel, or by
+  sending the `M92 E<steps>` command.
+
+Whether you use a preset, or set custom e-steps via the jog wheel
+or `M92`, your settings will automatically be saved to EEPROM.
+You do not need to use `M500`.
+
+### Configuring Hotend Fan Speed
+
+The Prusa firmware limits the hotend fan speed to 38% because a happy user is a user with a quiet
+but underperforming machine. The fan is capable of running at much
+higher RPMs. There are a few reasons you might want to do this:
+
+- Reduce heat creep.
+- Print higher temperature filaments.
+- Change the fan to one which requires full voltage, e.g. a Noctua.
+
+This menu option allows you to set the hotend fan speed anywhere from 50% to 100%,
+in 10% steps. The setting is automatically saved to EEPROM and restored on boot.
+
+### Configuring Skew Compensation
+
+The Prusa Mini+ is inherently prone to skew, by virtue of its cantilever
+design. It is normal to see skew on all three axes. This affects the precision
+of any parts you print.
+
+Prusa disabled skew compensation in Marlin, becaues a happy user is a user
+with an easy to use but imprecise machine. Lluckily our Llama has reenabled it.
+All three skew compensation coefficients are available for use - I for XY, J for XZ,
+and K for YZ.
+
+Note it is always preferable to remove as much skew as possible through physical
+adjustments before using firmware skew compensation. For excellent
+instructions, read [this post on Prusa's forum](https://forum.prusaprinters.org/forum/hardware-firmware-and-software-help/oh-no-were-skewed-prusa-mini-edition/).
+
+See [the section below](#calibrating-skew) for a guide on how to measure skew
+and compute the coefficients. You can use the jog wheel to set
+the coefficients in this menu, or use `M852`. Either way, the settings
+will automatically be saved to EEPROM - you do not need to use `M500`.
+Be sure to set `Skew Correct` to `On` for the settings to be used.
+
+Be careful with large skew correction factors - it is possible to go past
+the min or max travel on the X and Y axes while printing or even during
+mesh bed leveling. A skew factor of e.g. 0.01 equates to
+`0.01 * 180mm = 1.8mm` of movement at the far end of the bed,
+so your usable print area will be reduced accordingly.
+
+---
+
+### Print Progress
+
+Note that to take advantage of Llama's `M73` support with [OctoPrint](https://octoprint.org),
+you will need to install one or more plugins. I recommend these three:
+
+- [Print Time Genius](https://plugins.octoprint.org/plugins/PrintTimeGenius/),
+  an excellent plugin to compute accurate progress estimates. It doesn't send
+  `M73` or `M117` on its own, so you will need the next two plugins too.
+- [DisplayLayerProgress](https://github.com/OllisGit/OctoPrint-DisplayLayerProgress).
+  Turn on the "Printer Display" option and customize to your preference.
+  This will send `M117`. I like to set the message to `[printtime_left] L=[current_layer]/[total_layers]`
+  and the update interval to 10 seconds.
+- [M73 Progress](https://plugins.octoprint.org/plugins/m73progress/).
+  Be sure to enable the "Use time estimate" option.
+
+It may also be possible to arrange for your slicer to insert these commands,
+but the result will not be as accurate.
+
+---
+
+## Calibrating Skew
+
+Measuring skew on all three axes can be done all at once simply by printing
+[this compact calibration tower](https://www.thingiverse.com/thing:4611756).
+Make sure you turn off skew correction before you print it.
+Use a normal layer height (0.15mm) and print without supports.
+Here's one I made earlier:
+
+![Skew Tower](doc/llama/skew.jpg)
+
+We will use [calipers](https://amzn.to/3vVRgOl) to measure the six diagonals.
+Note that the axes of the tower are labeled with X, Y, and Z, and the labels
+all point in the positive (**+**) direction. To measure skew for each of the
+three planes (XY, XZ, and YZ), measure the **+/+** and **+/-** diagonals
+in that plane. For example, to calibrate XY skew, measure the **+X/+Y** and **+X/-Y** diagonals.
+
+To measure the **+X/+Y** diagonal, your calipers will run from the **-X/-Y** face
+to the **+X/+Y** face. Try to keep the tips of the calipers centered on the square
+faces, and avoid measuring print artefacts (e.g. elephant's foot) as much as possible.
+
+If the **+/+** diagonal is *longer* than the **+/-** diagonal, that means you
+will need a *positive* correction factor.
+Call the **+/+** diagonal `p`, and the **+/-** diagonal `q`.
+Plug your measurements into the following formula:
+
+`factor = (p^2 - q^2) / (p^2 + q^2)`
+
+As an example, I measured my **+X/+Y** length at 56.49mm, and **+X/-Y**
+at 56.75mm. The skew correction factor comes out to -0.0046
+for the XY plane. This equates to 0.46% of skew: without
+skew correction, if I print a 100mm square, two corners will be 0.46mm
+out of position. The skew factor is also approximately equal to the
+skew angle in radians, which you can multiply by 57.3 to convert to degrees.
+In this example, `-0.0046 * 57.3 = 0.26 degrees`.
+
+Repeat for the other two planes to compute the remaining correction factors.
+If you want to make sure the calibration is accurate, you can
+print another tower with skew correction enabled. The diagonals should
+then all have the same length (within measurement error of course).
+
+You can then follow the instructions above to set your skew factors,
+either using the menu and jogwheel, or by running `M852 I<xy> J<xz> K<yz>`.
+
+---
+
+*Copyright (C) 2021 Matthew Lloyd*
+
+## Original Prusa Mini Firmware README
+<details>
+<summary>Click to expand!</summary>
+
 # Buddy
 [![GitHub release](https://img.shields.io/github/release/prusa3d/Prusa-Firmware-Buddy.svg)](https://github.com/prusa3d/Prusa-Firmware-Buddy/releases)
 [![Build Status](https://holly.prusa3d.com/buildStatus/icon?job=Prusa-Firmware-Buddy%2FMultibranch%2Fmaster)](https://holly.prusa3d.com/job/Prusa-Firmware-Buddy/job/Multibranch/job/master/)
@@ -83,3 +295,4 @@ To install custom firmware, you have to break the appendix on the board. Learn h
 ## License
 
 The firmware source code is licensed under the GNU General Public License v3.0 and the graphics and design are licensed under Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0). Fonts are licensed under different license (see [LICENSE](LICENSE.md)).
+</details>
