@@ -409,6 +409,20 @@ void marlin_server_settings_save(void) {
 #endif
 }
 
+void marlin_server_settings_save_bed_pid(void) {
+    eeprom_set_var(EEVAR_PID_BED_P, variant8_flt(Temperature::temp_bed.pid.Kp));
+    eeprom_set_var(EEVAR_PID_BED_I, variant8_flt(Temperature::temp_bed.pid.Ki));
+    eeprom_set_var(EEVAR_PID_BED_D, variant8_flt(Temperature::temp_bed.pid.Kd));
+}
+
+void marlin_server_settings_save_noz_pid(void) {
+#if ENABLED(PIDTEMP)
+    eeprom_set_var(EEVAR_PID_NOZ_P, variant8_flt(Temperature::temp_hotend[0].pid.Kp));
+    eeprom_set_var(EEVAR_PID_NOZ_I, variant8_flt(Temperature::temp_hotend[0].pid.Ki));
+    eeprom_set_var(EEVAR_PID_NOZ_D, variant8_flt(Temperature::temp_hotend[0].pid.Kd));
+#endif
+}
+
 void marlin_server_settings_load(void) {
     (void)settings.reset();
 #if HAS_BED_PROBE

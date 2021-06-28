@@ -3,6 +3,7 @@
 #include "../../lib/Marlin/Marlin/src/gcode/queue.h"
 
 #include "PrusaGcodeSuite.hpp"
+#include "../common/marlin_server.h"
 
 #include "M330.h"
 #include "M50.hpp"
@@ -20,6 +21,30 @@ bool GcodeSuite::process_parsed_command_custom(bool no_ok) {
             return true;
         case 300:
             PrusaGcodeSuite::M300();
+            if (!no_ok) queue.ok_to_send();
+            return true;
+        case 301:
+            M301();
+            marlin_server_settings_save_noz_pid();
+            if (!no_ok) queue.ok_to_send();
+            return true;
+        case 303: {
+            M303();
+            const int16_t e = parser.intval('E');
+            const bool u = parser.boolval('U');
+            if (u) {
+                if (e == -1)
+                    marlin_server_settings_save_bed_pid();
+                else if (e == 0)
+                    marlin_server_settings_save_noz_pid();
+            }
+            if (!no_ok)
+                queue.ok_to_send();
+            return true;
+        }
+        case 304:
+            M304();
+            marlin_server_settings_save_bed_pid();
             if (!no_ok) queue.ok_to_send();
             return true;
 #if defined(_DEBUG)

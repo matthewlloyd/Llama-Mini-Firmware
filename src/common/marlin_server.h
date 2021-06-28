@@ -55,6 +55,8 @@ extern int marlin_server_inject_gcode(const char *gcode);
 
 // direct call of settings.save()
 extern void marlin_server_settings_save(void);
+extern void marlin_server_settings_save_bed_pid(void);
+extern void marlin_server_settings_save_noz_pid(void);
 
 // direct call of settings.load()
 extern void marlin_server_settings_load(void);
