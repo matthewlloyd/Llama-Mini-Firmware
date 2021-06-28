@@ -99,8 +99,8 @@ You do not need to use `M500`.
 
 ### Configuring Hotend Fan Speed
 
-The Prusa firmware limits the hotend fan speed to 38% because a happy user is a user with a quiet
-but underperforming machine. The fan is capable of running at much
+The Prusa firmware limits the hotend fan speed to 38% because a happy user is a user with
+an underperforming but quiet machine. The fan is capable of running at much
 higher RPMs. There are a few reasons you might want to do this:
 
 - Reduce heat creep.
@@ -116,8 +116,8 @@ The Prusa Mini+ is inherently prone to skew, by virtue of its cantilever
 design. It is normal to see skew on all three axes. This affects the precision
 of any parts you print.
 
-Prusa disabled skew compensation in Marlin, becaues a happy user is a user
-with an easy to use but imprecise machine. Lluckily our Llama has reenabled it.
+Prusa disabled skew compensation in Marlin, because a happy user is a user
+with an imprecise but easy to use machine. Lluckily our Llama has reenabled it.
 All three skew compensation coefficients are available for use - I for XY, J for XZ,
 and K for YZ.
 
@@ -161,7 +161,7 @@ but the result will not be as accurate.
 
 ## Calibrating Skew
 
-Measuring skew on all three axes can be done all at once simply by printing
+Measuring skew on all three axes at once can be done by simply printing
 [this compact calibration tower](https://www.thingiverse.com/thing:4611756).
 Make sure you turn off skew correction before you print it.
 Use a normal layer height (0.15mm) and print without supports.
