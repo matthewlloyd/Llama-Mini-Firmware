@@ -183,45 +183,24 @@ but the result will not be as accurate.
 ## Calibrating Skew
 
 Measuring skew on all three axes at once can be done by simply printing
-[this compact calibration tower](https://www.thingiverse.com/thing:4611756).
-Make sure you turn off skew correction before you print it.
-Use a normal layer height (0.15mm) and print without supports.
-Here's one I made earlier:
+[this compact calibration tower](doc/llama/skew.stl):
 
 ![Skew Tower](doc/llama/skew.jpg)
 
-We will use [calipers](https://amzn.to/3vVRgOl) to measure the six diagonals.
-Note that the axes of the tower are labeled with X, Y, and Z, and the labels
-all point in the positive (**+**) direction. To measure skew for each of the
-three planes (XY, XZ, and YZ), measure the **+/+** and **+/-** diagonals
-in that plane. For example, to calibrate XY skew, measure the **+X/+Y** and **+X/-Y** diagonals.
+Turn off skew correction before you print. Use a normal layer height
+(0.15mm) and no supports. Do not rotate the model in your slicer -
+it must be printed in the same orientation as supplied in the STL.
 
-To measure the **+X/+Y** diagonal, your calipers will run from the **-X/-Y** face
-to the **+X/+Y** face. Try to keep the tips of the calipers centered on the square
-faces, and avoid measuring print artefacts (e.g. elephant's foot) as much as possible.
+Then, make a copy of [this spreadsheet](https://bit.ly/2SJ1hAU).
+Use [calipers](https://amzn.to/3vVRgOl) to measure the six diagonals,
+conveniently labeled A to F, and type the measurements
+into the spreadsheet. It will calculate your three skew correction factors.
+You can either input them using the Llama menu and jogwheel as described above,
+or send them directly to the printer using the supplied `M852` command.
 
-If the **+/+** diagonal is *longer* than the **+/-** diagonal, that means you
-will need a *positive* correction factor.
-Call the **+/+** diagonal `p`, and the **+/-** diagonal `q`.
-Plug your measurements into the following formula:
-
-`factor = (p^2 - q^2) / (p^2 + q^2)`
-
-As an example, I measured my **+X/+Y** length at 56.49mm, and **+X/-Y**
-at 56.75mm. The skew correction factor comes out to -0.0046
-for the XY plane. This equates to 0.46% of skew: without
-skew correction, if I print a 100mm square, two corners will be 0.46mm
-out of position. The skew factor is also approximately equal to the
-skew angle in radians, which you can multiply by 57.3 to convert to degrees.
-In this example, `-0.0046 * 57.3 = 0.26 degrees`.
-
-Repeat for the other two planes to compute the remaining correction factors.
-If you want to make sure the calibration is accurate, you can
-print another tower with skew correction enabled. The diagonals should
+If you want to check your calibration is accurate,
+print the same tower with skew correction enabled. The diagonals should
 then all have the same length (within measurement error of course).
-
-You can then follow the instructions above to set your skew factors,
-either using the menu and jogwheel, or by running `M852 I<xy> J<xz> K<yz>`.
 
 ---
 
