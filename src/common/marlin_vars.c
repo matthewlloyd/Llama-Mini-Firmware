@@ -44,7 +44,8 @@ const char *__var_name[] = {
     "SKEW_XY",
     "SKEW_XZ",
     "SKEW_YZ",
-    "ESTEPS"
+    "ESTEPS",
+    "EREVERSE",
 };
 
 static_assert((sizeof(__var_name) / sizeof(char *)) == (MARLIN_VAR_MAX + 1), "Invalid number of elements in __var_name");
@@ -267,6 +268,9 @@ void marlin_vars_set_var(marlin_vars_t *vars, uint8_t var_id, variant8_t var) {
     case MARLIN_VAR_ESTEPS:
         vars->esteps = variant8_get_flt(var);
         break;
+    case MARLIN_VAR_EXTRUDER_REVERSE:
+        vars->extruder_reverse = variant_get_ui8(var);
+        break;
     case MARLIN_VAR_SKEW_XY:
         vars->skew_xy = variant8_get_flt(var);
         break;
@@ -348,6 +352,8 @@ int marlin_vars_value_to_str(marlin_vars_t *vars, uint8_t var_id, char *str, uns
         return snprintf(str, size, "%u", (unsigned int)(vars->fs_autoload_enabled));
     case MARLIN_VAR_ESTEPS:
         return snprintf(str, size, "%f", (double)(vars->esteps));
+    case MARLIN_VAR_EXTRUDER_REVERSE:
+        return snprintf(str, size, "%u", (unsigned int)(vars->extruder_reverse));
     case MARLIN_VAR_SKEW_XY:
         return snprintf(str, size, "%+.4f", (double)(vars->skew_xy));
     case MARLIN_VAR_SKEW_XZ:
@@ -433,6 +439,10 @@ int marlin_vars_str_to_value(marlin_vars_t *vars, uint8_t var_id, const char *st
         return sscanf(str, "%f", &(vars->skew_xz));
     case MARLIN_VAR_SKEW_YZ:
         return sscanf(str, "%f", &(vars->skew_yz));
+    case MARLIN_VAR_ESTEPS:
+        return sscanf(str, "%f", &(vars->esteps));
+    case MARLIN_VAR_EXTRUDER_REVERSE:
+        return sscanf(str, "%hhu", &(vars->extruder_reverse));
     }
     return 0;
 }
