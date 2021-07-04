@@ -24,42 +24,50 @@
 #include "variant8.h"
 #include "eeprom.h"
 
-static const constexpr uint8_t EEPROM_LLAMA__PADDING = 3;
+static const constexpr uint8_t EEPROM_LLAMA__PADDING = 4;
+
+// Llama eeprom datasize must always increase with increasing version.
+// Do not remove fields.
 
 // Llama eeprom map
 static const eeprom_entry_t eeprom_llama_map[] = {
-    { "VERSION",             VARIANT8_UI16,  1, EEVAR_FLG_READONLY }, // EEVAR_LLAMA_VERSION
+    { "VERSION",             VARIANT8_UI16,  1, 0 }, // EEVAR_LLAMA_VERSION
+    { "DATASIZE",            VARIANT8_UI16,  1, 0 }, // EEVAR_LLAMA_DATASIZE
     { "EXTRUDER_TYPE",       VARIANT8_UI8,   1, 0 }, // EEVAR_LLAMA_EXTRUDER_TYPE
     { "EXTRUDER_ESTEPS",     VARIANT8_FLT,   1, 0 }, // EEVAR_LLAMA_EXTRUDER_ESTEPS
     { "HOTEND_FAN_SPD",      VARIANT8_UI8,   1, 0 }, // EEVAR_LLAMA_HOTEND_FAN_SPEED
-    { "SKEW_ENABLED",        VARIANT8_UI8,   1, 0 }, // EEPROM_LLAMA_SKEW_ENABLED
-    { "SKEW_XY",             VARIANT8_FLT,   1, 0 }, // EEPROM_LLAMA_SKEW_XY
-    { "SKEW_XZ",             VARIANT8_FLT,   1, 0 }, // EEPROM_LLAMA_SKEW_XZ
-    { "SKEW_YZ",             VARIANT8_FLT,   1, 0 }, // EEPROM_LLAMA_SKEW_YZ
+    { "SKEW_ENABLED",        VARIANT8_UI8,   1, 0 }, // EEVAR_LLAMA_SKEW_ENABLED
+    { "SKEW_XY",             VARIANT8_FLT,   1, 0 }, // EEVAR_LLAMA_SKEW_XY
+    { "SKEW_XZ",             VARIANT8_FLT,   1, 0 }, // EEVAR_LLAMA_SKEW_XZ
+    { "SKEW_YZ",             VARIANT8_FLT,   1, 0 }, // EEVAR_LLAMA_SKEW_YZ
+    { "EXTRUDER_REV",        VARIANT8_UI8,   1, 0 }, // EEVAR_LLAMA_EXTRUDER_REVERSE
     { "_PADDING",            VARIANT8_PCHAR, EEPROM_LLAMA__PADDING, 0 }, // EEVAR_LLAMA__PADDING32
     { "CRC32",               VARIANT8_UI32,  1, 0 }, // EEVAR_LLAMA_CRC32
 };
 
 enum {
     EEPROM_LLAMA_ADDRESS = 0x0600,
-    EEPROM_LLAMA_VERSION = 1
+    EEPROM_LLAMA_VERSION = 2
 };
 
 enum {
     EEVAR_LLAMA_VERSION = 0x00,         // uint16_t eeprom version
-    EEVAR_LLAMA_EXTRUDER_TYPE = 0x01,
-    EEVAR_LLAMA_EXTRUDER_ESTEPS = 0x02,
-    EEVAR_LLAMA_HOTEND_FAN_SPEED = 0x03,
-    EEVAR_LLAMA_SKEW_ENABLED = 0x04,
-    EEVAR_LLAMA_SKEW_XY = 0x05,
-    EEVAR_LLAMA_SKEW_XZ = 0x06,
-    EEVAR_LLAMA_SKEW_YZ = 0x07,
-    EEVAR_LLAMA__PADDING = 0x08,            // 1..4 chars, to ensure (DATASIZE % 4 == 0)
-    EEVAR_LLAMA_CRC32 = 0x09,               // uint32_t crc32
+    EEVAR_LLAMA_DATASIZE = 0x01,         // uint16_t eeprom datasize
+    EEVAR_LLAMA_EXTRUDER_TYPE = 0x02,
+    EEVAR_LLAMA_EXTRUDER_ESTEPS = 0x03,
+    EEVAR_LLAMA_HOTEND_FAN_SPEED = 0x04,
+    EEVAR_LLAMA_SKEW_ENABLED = 0x05,
+    EEVAR_LLAMA_SKEW_XY = 0x06,
+    EEVAR_LLAMA_SKEW_XZ = 0x07,
+    EEVAR_LLAMA_SKEW_YZ = 0x08,
+    EEVAR_LLAMA_EXTRUDER_REVERSE = 0x09,
+    EEVAR_LLAMA__PADDING = 0x0A,            // 1..4 chars, to ensure (DATASIZE % 4 == 0)
+    EEVAR_LLAMA_CRC32 = 0x0B,               // uint32_t crc32
 };
 
 typedef struct __attribute__((__packed__)) _eeprom_llama_vars_t {
     uint16_t VERSION;
+    uint16_t DATASIZE;
     uint8_t EXTRUDER_TYPE;
     float EXTRUDER_ESTEPS;
     uint8_t HOTEND_FAN_SPEED;
@@ -67,6 +75,7 @@ typedef struct __attribute__((__packed__)) _eeprom_llama_vars_t {
     float SKEW_XY;
     float SKEW_XZ;
     float SKEW_YZ;
+    uint8_t EXTRUDER_REVERSE;
     char _PADDING[EEPROM_LLAMA__PADDING];
     uint32_t CRC32;
 } eeprom_llama_vars_t;
@@ -79,6 +88,7 @@ static const constexpr uint32_t EEPROM_LLAMA_DATASIZE = sizeof(eeprom_llama_vars
 // Llama eeprom variable defaults
 static const eeprom_llama_vars_t eeprom_llama_var_defaults = {
     EEPROM_LLAMA_VERSION,   // EEPROM_LLAMA_VERSION
+    EEPROM_LLAMA_DATASIZE,  // EEPROM_LLAMA_DATASIZE
     0,                      // EEPROM_LLAMA_EXTRUDER_TYPE
     325.f,                  // EEPROM_LLAMA_EXTRUDER_ESTEPS
     0,                      // EEPROM_LLAMA_HOTEND_FAN_SPEED
@@ -86,6 +96,7 @@ static const eeprom_llama_vars_t eeprom_llama_var_defaults = {
     0.f,                    // EEPROM_LLAMA_SKEW_XY
     0.f,                    // EEPROM_LLAMA_SKEW_XZ
     0.f,                    // EEPROM_LLAMA_SKEW_YZ
+    0,                      // EEPROM_LLAMA_EXTRUDER_REVERSE
     "",                     // EEVAR_LLAMA__PADDING
     0xffffffff,             // EEVAR_LLAMA_CRC32
 };

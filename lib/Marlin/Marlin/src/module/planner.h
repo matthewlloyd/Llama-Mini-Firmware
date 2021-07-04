@@ -969,3 +969,4 @@ class Planner {
 #define PLANNER_XY_FEEDRATE() (_MIN(planner.settings.max_feedrate_mm_s[X_AXIS], planner.settings.max_feedrate_mm_s[Y_AXIS]))
 
 extern Planner planner;
+extern bool marlin_config_extruder_reverse;
