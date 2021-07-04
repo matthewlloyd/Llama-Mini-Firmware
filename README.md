@@ -159,11 +159,6 @@ Note that if you run `M303` (autotune) without the `U1` parameter, Marlin
 will just print out the suggested PID values without changing the settings,
 and they won't get written to EEPROM.
 
-Note also that due to [this bug](https://github.com/prusa3d/Prusa-Firmware-Buddy/issues/798)
-in Prusa's edition of Marlin, to autotune the bed using `M303` you must specify
-`E-2` instead of the usual  `E-1`, otherwise you will see the error message
-`PID autotune failed! - Temperature too high`.
-
 ---
 
 ### Print Progress
