@@ -46,7 +46,7 @@ void GcodeSuite::M303() {
   #else
     #define EI H_BED
   #endif
-  const heater_ind_t e = (heater_ind_t)parser.intval('E');
+  heater_ind_t e = (heater_ind_t)parser.intval('E');
   if (!WITHIN(e, SI, EI)) {
     SERIAL_ECHOLNPGM(MSG_PID_BAD_EXTRUDER_NUM);
     return;
@@ -59,6 +59,10 @@ void GcodeSuite::M303() {
   #if DISABLED(BUSY_WHILE_HEATING)
     KEEPALIVE_STATE(NOT_BUSY);
   #endif
+
+  // Llama: work around https://github.com/prusa3d/Prusa-Firmware-Buddy/issues/798
+  if (e == -1)
+      e = (heater_ind_t) -2;
 
   thermalManager.PID_autotune(temp, e, c, u);
 }
