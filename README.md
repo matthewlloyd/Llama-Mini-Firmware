@@ -76,6 +76,8 @@ explicitly give permission. Go to the Settings menu, scroll down to "FW Upgrade"
 and change the option to "On Restart Older" (this option is only available
 in Llama firmware).
 
+To reflash the board in DFU mode, [see below](#flashing-in-dfu-mode).
+
 ---
 
 ## Configuration
@@ -201,6 +203,41 @@ or send them directly to the printer using the supplied `M852` command.
 If you want to check your calibration is accurate,
 print the same tower with skew correction enabled. The diagonals should
 then all have the same length (within measurement error of course).
+
+---
+
+### Flashing in DFU Mode
+
+If the bootloader refuses to accept firmware from a USB flash drive,
+it's possible to flash the board directly in DFU mode.
+
+Compile the firmware and build a DFU file:
+
+```
+$ python3 utils/build.py --generate-dfu --bootloader yes
+```
+
+If you built it from another machine, copy it to your Pi:
+
+```
+$ scp build/mini_release_boot/firmware.dfu <user>@<pi-host>:~/
+```
+
+Put your Buddy board in DFU mode by placing a jumper across the relevant pins
+and resetting. If you have a 3-pin header next to the appendix (older versions
+of the board), put the jumper between BOOT0 and 3.3V. If you have a 2-pin header,
+just add a jumper.
+
+Then flash from your Pi:
+
+```
+$ lsusb
+Bus 001 Device 010: ID 0483:df11 STMicroelectronics STM Device in DFU Mode
+$ sudo apt install dfu-util
+$ dfu-util -a 0 -D firmware.dfu
+```
+
+Don't forget to remove the jumper before resetting.
 
 ---
 
