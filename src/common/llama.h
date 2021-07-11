@@ -80,9 +80,11 @@ typedef struct __attribute__((__packed__)) _eeprom_llama_vars_t {
     uint32_t CRC32;
 } eeprom_llama_vars_t;
 
+#define EEPROM_LLAMA_MIN_DATASIZE (28)
 static_assert(sizeof(eeprom_llama_vars_t) % 4 == 0, "EEPROM_LLAMA__PADDING needs to be adjusted so CRC32 could work.");
 static const constexpr uint32_t EEPROM_LLAMA_VARCOUNT = sizeof(eeprom_llama_map) / sizeof(eeprom_entry_t);
 static const constexpr uint32_t EEPROM_LLAMA_DATASIZE = sizeof(eeprom_llama_vars_t);
+static_assert(EEPROM_LLAMA_DATASIZE >= EEPROM_LLAMA_MIN_DATASIZE, "EEPROM_LLAMA_DATASIZE too small. Only add fields.");
 
 
 // Llama eeprom variable defaults
