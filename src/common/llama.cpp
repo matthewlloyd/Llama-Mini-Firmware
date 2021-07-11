@@ -150,8 +150,8 @@ static uint16_t eeprom_llama_var_offset(uint8_t id) {
 static int eeprom_llama_check_crc32() {
     uint16_t datasize = _eeprom_llama_cache.DATASIZE;
     if (_eeprom_llama_cache.VERSION == 1)
-        datasize = 28;  // before datasize field was added
-    if (datasize < 0 || datasize > EEPROM_LLAMA_DATASIZE) return 0;
+        datasize = EEPROM_LLAMA_MIN_DATASIZE;  // before datasize field was added
+    if (datasize < EEPROM_LLAMA_MIN_DATASIZE || datasize > EEPROM_LLAMA_DATASIZE) return 0;
     uint32_t crc2 = crc32_eeprom((uint32_t *)&_eeprom_llama_cache, (datasize - 4) / 4);
     uint32_t eeprom_crc2 = *((uint32_t*)(((uint8_t*)&_eeprom_llama_cache) + datasize - 4));
     return eeprom_crc2 == crc2 ? 1 : 0;
@@ -159,7 +159,7 @@ static int eeprom_llama_check_crc32() {
 
 static void eeprom_llama_update_crc32() {
     uint16_t datasize = _eeprom_llama_cache.DATASIZE;
-    if (datasize < 0 || datasize > EEPROM_LLAMA_DATASIZE) return;
+    if (datasize < EEPROM_LLAMA_MIN_DATASIZE || datasize > EEPROM_LLAMA_DATASIZE) return;
     // calculate crc32
     _eeprom_llama_cache.CRC32 = crc32_eeprom((uint32_t *)&_eeprom_llama_cache, (datasize - 4) / 4);
     // write crc to eeprom
