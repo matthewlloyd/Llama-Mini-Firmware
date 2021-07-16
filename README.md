@@ -210,13 +210,15 @@ then all have the same length (within measurement error of course).
 If the bootloader refuses to accept firmware from a USB flash drive,
 it's possible to flash the board directly in DFU mode.
 
-Compile the firmware and build a DFU file:
+Compile the firmware and build a DFU file. Note this cannot be done on a
+Raspberry Pi because Prusa's build system only supports x86 Linux.
+Use WSL on Windows, Windows, Linux, or a Mac.
 
 ```
 $ python3 utils/build.py --generate-dfu --bootloader yes
 ```
 
-If you built it from another machine, copy it to your Pi:
+Copy it to your Pi:
 
 ```
 $ scp build/mini_release_boot/firmware.dfu <user>@<pi-host>:~/
