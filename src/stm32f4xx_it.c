@@ -191,13 +191,32 @@ void USART2_IRQHandler() {
     HAL_UART_IRQHandler(&huart2);
 }
 
+extern USART_RECEIVETYPE usartType;
+void UsartReceive_IDLE(UART_HandleTypeDef *huart)
+{
+    uint32_t temp;
+    if((__HAL_UART_GET_FLAG(huart,UART_FLAG_IDLE)) != RESET)  //Detect idle interrupt
+    {
+        __HAL_UART_CLEAR_IDLEFLAG(huart);
+        if (__HAL_UART_GET_FLAG( huart , UART_FLAG_IDLE )){
+
+        }
+        HAL_UART_DMAStop(huart);
+        temp = huart->hdmarx->Instance->NDTR; //Get the remaining dma length
+        usartType.RX_Size =  RX_LEN - temp;
+        usartType.RX_flag=1;
+        usartType.RX_Index=0;
+        HAL_UART_Receive_DMA(huart,usartType.RX_pData,RX_LEN);
+     }
+
+ }
+ 
+
 void USART6_IRQHandler() {
-    if (__HAL_UART_GET_FLAG(&huart6, UART_FLAG_IDLE)) {
-        __HAL_UART_CLEAR_IDLEFLAG(&huart6);
-        uartrxbuff_idle_cb(&uart6rxbuff);
-    }
-    HAL_UART_IRQHandler(&huart6);
-}
+      UsartReceive_IDLE(&huart6); //Enter idle interrupt
+     HAL_UART_IRQHandler(&huart6);
+ }
+
 
 /**
   * @brief This function handles Window watchdog interrupt.
