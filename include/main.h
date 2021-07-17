@@ -26,6 +26,16 @@ void Error_Handler(void);
 }
 #endif //__cplusplus
 
+#define RX_LEN 1000
+
+typedef struct
+{
+uint8_t  RX_flag:1;        //IDLE receive flag
+uint16_t RX_Size;          //receive length
+uint8_t  RX_pData[RX_LEN]; //DMA receive buffer
+uint16_t RX_Index;
+} USART_RECEIVETYPE;
+
 #define USB_HS_N_Pin          GPIO_PIN_14
 #define USB_HS_N_GPIO_Port    GPIOB
 #define USB_HS_P_Pin          GPIO_PIN_15

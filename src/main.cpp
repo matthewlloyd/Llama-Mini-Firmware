@@ -68,6 +68,7 @@
 #include "crc32.h"
 #include "w25x.h"
 #include "llama.h"
+#include "HardwareSerial.h"
 
 #define USB_OVERC_Pin       GPIO_PIN_4
 #define USB_OVERC_GPIO_Port GPIOE
@@ -267,11 +268,18 @@ int main(void) {
     HAL_UART_Receive_DMA(&huart1, uart1rxbuff.buffer, uart1rxbuff.buffer_size);
     uartrxbuff_reset(&uart1rxbuff);
 
+
+#ifdef USE_UART6_SERIAL
+    extern USART_RECEIVETYPE usartType;
+    __HAL_UART_ENABLE_IT(&huart6, UART_IT_IDLE); //Turn on idle interrupt
+    HAL_UART_Receive_DMA(&huart6, usartType.RX_pData, RX_LEN);  //Enable serial port DMA receiving interrupt
+#else
     uartrxbuff_init(&uart6rxbuff, &huart6, &hdma_usart6_rx, sizeof(uart6rx_data), uart6rx_data);
     HAL_UART_Receive_DMA(&huart6, uart6rxbuff.buffer, uart6rxbuff.buffer_size);
     uartrxbuff_reset(&uart6rxbuff);
     uartslave_init(&uart6slave, &uart6rxbuff, &huart6, sizeof(uart6slave_line), uart6slave_line);
     putslave_init(&uart6slave);
+#endif    
     wdt_iwdg_warning_cb = iwdg_warning_cb;
 
     crc32_init();
@@ -971,8 +979,10 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *haurt) {
 void HAL_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart) {
     if (huart == &huart2)
         buddy::hw::BufferedSerial::uart2.FirstHalfReachedISR();
+#ifndef USE_UART6_SERIAL
     else if (huart == &huart6)
         uartrxbuff_rxhalf_cb(&uart6rxbuff);
+#endif
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
@@ -980,8 +990,10 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
         uartrxbuff_rxcplt_cb(&uart1rxbuff);
     else if (huart == &huart2)
         buddy::hw::BufferedSerial::uart2.SecondHalfReachedISR();
+#ifndef USE_UART6_SERIAL        
     else if (huart == &huart6)
         uartrxbuff_rxcplt_cb(&uart6rxbuff);
+#endif
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
