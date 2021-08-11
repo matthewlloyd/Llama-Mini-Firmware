@@ -41,7 +41,8 @@ enum {
     MARLIN_VAR_SKEW_XZ  = 0x21,             //RW: float
     MARLIN_VAR_SKEW_YZ  = 0x22,             //RW: float
     MARLIN_VAR_ESTEPS   = 0x23,             //RW: float
-    MARLIN_VAR_MAX = MARLIN_VAR_ESTEPS
+    MARLIN_VAR_EXTRUDER_REVERSE = 0x24,    //RW: uint8
+    MARLIN_VAR_MAX = MARLIN_VAR_EXTRUDER_REVERSE
 };
 
 // variable masks
@@ -154,6 +155,7 @@ typedef struct _marlin_vars_t {
     uint8_t sd_printing;     // card.flag.sdprinting
     uint8_t sd_percent_done; // card.percentDone() [%]
     uint8_t media_inserted;  // media_is_inserted()
+    uint8_t extruder_reverse;// reverse extruder [on/off]
 } marlin_vars_t;
 
 #ifdef __cplusplus

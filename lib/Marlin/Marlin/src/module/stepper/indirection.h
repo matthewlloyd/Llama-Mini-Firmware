@@ -388,8 +388,8 @@ void reset_stepper_drivers();    // Called by settings.load / settings.reset
 
 #elif E_STEPPERS
   #define E_STEP_WRITE(E,V) E0_STEP_WRITE(V)
-  #define   NORM_E_DIR(E)   E0_DIR_WRITE(!INVERT_E0_DIR)
-  #define    REV_E_DIR(E)   E0_DIR_WRITE( INVERT_E0_DIR)
+  #define   NORM_E_DIR(E)   E0_DIR_WRITE((!INVERT_E0_DIR) ^ marlin_config_extruder_reverse )
+  #define    REV_E_DIR(E)   E0_DIR_WRITE(( INVERT_E0_DIR) ^ marlin_config_extruder_reverse )
 
 #else
   #define E_STEP_WRITE(E,V) NOOP
