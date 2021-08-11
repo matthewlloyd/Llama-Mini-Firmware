@@ -1341,6 +1341,10 @@ void marlin_server_handle_var_change(int var_id) {
         planner.settings.axis_steps_per_mm[3] = marlin_server.vars.esteps;
         planner.refresh_positioning();
         break;
+    case MARLIN_VAR_EXTRUDER_REVERSE:
+        changed = true;
+        marlin_config_extruder_reverse = (marlin_server.vars.extruder_reverse != 0);
+        break;
     case MARLIN_VAR_SKEW_XY:
     case MARLIN_VAR_SKEW_XZ:
     case MARLIN_VAR_SKEW_YZ:

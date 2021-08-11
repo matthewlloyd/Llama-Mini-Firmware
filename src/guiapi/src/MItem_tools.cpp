@@ -476,8 +476,8 @@ bool MI_MINDA::StateChanged() {
 /*****************************************************************************/
 //MI_EXTRUDER_TYPE
 MI_EXTRUDER_TYPE::MI_EXTRUDER_TYPE()
-    : WI_SWITCH_t<4>(variant_get_ui8(eeprom_llama_get_var(EEVAR_LLAMA_EXTRUDER_TYPE)), _(label), 0, is_enabled_t::yes, is_hidden_t::no,
-                     _(str_Prusa), _(str_Bondtech), _(str_BondtechReversed), _(str_UserUseM92)) {}
+    : WI_SWITCH_t<3>(variant_get_ui8(eeprom_llama_get_var(EEVAR_LLAMA_EXTRUDER_TYPE)), _(label), 0, is_enabled_t::yes, is_hidden_t::no,
+                     _(str_Prusa), _(str_Bondtech), _(str_UserUseM92)) {}
 void MI_EXTRUDER_TYPE::OnChange(size_t old_type) {
     eeprom_llama_set_var(EEVAR_LLAMA_EXTRUDER_TYPE, variant8_ui8(index), true);
     llama_apply_extruder_settings();
@@ -496,6 +496,15 @@ MI_EXTRUDER_ESTEPS::MI_EXTRUDER_ESTEPS()
 }
 void MI_EXTRUDER_ESTEPS::OnClick() {
     eeprom_llama_set_var(EEVAR_LLAMA_EXTRUDER_ESTEPS, variant8_flt(GetVal()), true);
+    llama_apply_extruder_settings();
+}
+
+/*****************************************************************************/
+//MI_EXTRUDER_REVERSE
+MI_EXTRUDER_REVERSE::MI_EXTRUDER_REVERSE()
+    : WI_SWITCH_OFF_ON_t(variant_get_ui8(eeprom_llama_get_var(EEVAR_LLAMA_EXTRUDER_REVERSE)), _(label), 0, is_enabled_t::yes, is_hidden_t::no) {}
+void MI_EXTRUDER_REVERSE::OnChange(size_t old_index) {
+    eeprom_llama_set_var(EEVAR_LLAMA_EXTRUDER_REVERSE, variant8_ui8(index), true);
     llama_apply_extruder_settings();
 }
 

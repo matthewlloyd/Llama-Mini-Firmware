@@ -109,6 +109,7 @@
 #define BLOCK_DELAY_FOR_1ST_MOVE 100
 
 Planner planner;
+bool marlin_config_extruder_reverse = false;
 
   // public:
 

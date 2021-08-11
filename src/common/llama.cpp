@@ -54,13 +54,30 @@ static inline void eeprom_llama_unlock(void) {
 void eeprom_llama_init(void) {
     if (_eeprom_llama_cache_loaded) return;
 
-    uint16_t version;
     osSemaphoreDef(eepromLlamaSema);
     eeprom_llama_sema = osSemaphoreCreate(osSemaphore(eepromLlamaSema), 1);
     st25dv64k_user_read_bytes(EEPROM_LLAMA_ADDRESS, &_eeprom_llama_cache, sizeof(eeprom_llama_vars_t));
-    version = _eeprom_llama_cache.VERSION;
-    if (version != EEPROM_LLAMA_VERSION || !eeprom_llama_check_crc32()) {
+    if (!eeprom_llama_check_crc32()) {
         eeprom_llama_defaults();
+    } else if (_eeprom_llama_cache.VERSION < 1 || _eeprom_llama_cache.VERSION > EEPROM_LLAMA_VERSION) {
+        eeprom_llama_defaults();
+    } else {
+        if (_eeprom_llama_cache.VERSION == 1) {
+            // upgrade to version 2: adds extruder reverse
+            // move data forward to account for addition of datasize field
+            memcpy(((void*)&_eeprom_llama_cache) + 4, ((void*)&_eeprom_llama_cache) + 2, 19);
+            _eeprom_llama_cache.EXTRUDER_REVERSE = 0;
+            if (_eeprom_llama_cache.EXTRUDER_TYPE == 2) {  // Bond-Rev
+                _eeprom_llama_cache.EXTRUDER_TYPE = 1;
+                _eeprom_llama_cache.EXTRUDER_REVERSE = 1;
+            } else if (_eeprom_llama_cache.EXTRUDER_TYPE == 3) {  // Custom
+                _eeprom_llama_cache.EXTRUDER_TYPE = 2;
+            }
+            _eeprom_llama_cache.VERSION = 2;
+            _eeprom_llama_cache.DATASIZE = EEPROM_LLAMA_DATASIZE;
+            _eeprom_llama_cache.CRC32 = crc32_eeprom((uint32_t *)(&_eeprom_llama_cache), (EEPROM_LLAMA_DATASIZE - 4) / 4);
+            st25dv64k_user_write_bytes(EEPROM_LLAMA_ADDRESS, (void *)&_eeprom_llama_cache, EEPROM_LLAMA_DATASIZE);
+        }
     }
     _eeprom_llama_cache_loaded = true;
 }
@@ -131,13 +148,20 @@ static uint16_t eeprom_llama_var_offset(uint8_t id) {
 }
 
 static int eeprom_llama_check_crc32() {
-    uint32_t crc2 = crc32_eeprom((uint32_t *)&_eeprom_llama_cache, (EEPROM_LLAMA_DATASIZE - 4) / 4);
-    return (_eeprom_llama_cache.CRC32 == crc2) ? 1 : 0;
+    uint16_t datasize = _eeprom_llama_cache.DATASIZE;
+    if (_eeprom_llama_cache.VERSION == 1)
+        datasize = 28;  // before datasize field was added
+    if (datasize < 0 || datasize > EEPROM_LLAMA_DATASIZE) return 0;
+    uint32_t crc2 = crc32_eeprom((uint32_t *)&_eeprom_llama_cache, (datasize - 4) / 4);
+    uint32_t eeprom_crc2 = *((uint32_t*)(((uint8_t*)&_eeprom_llama_cache) + datasize - 4));
+    return eeprom_crc2 == crc2 ? 1 : 0;
 }
 
 static void eeprom_llama_update_crc32() {
+    uint16_t datasize = _eeprom_llama_cache.DATASIZE;
+    if (datasize < 0 || datasize > EEPROM_LLAMA_DATASIZE) return;
     // calculate crc32
-    _eeprom_llama_cache.CRC32 = crc32_eeprom((uint32_t *)&_eeprom_llama_cache, (EEPROM_LLAMA_DATASIZE - 4) / 4);
+    _eeprom_llama_cache.CRC32 = crc32_eeprom((uint32_t *)&_eeprom_llama_cache, (datasize - 4) / 4);
     // write crc to eeprom
     st25dv64k_user_write_bytes(EEPROM_LLAMA_ADDRESS + sizeof(eeprom_llama_vars_t) - 4, &(_eeprom_llama_cache.CRC32), 4);
 }
@@ -183,9 +207,6 @@ float llama_compute_extruder_esteps() {
     case eEXTRUDER_TYPE::EXTRUDER_TYPE_BONDTECH:
         esteps = 415;
         break;
-    case eEXTRUDER_TYPE::EXTRUDER_TYPE_BONDTECH_REVERSED:
-        esteps = -415;
-        break;
     case eEXTRUDER_TYPE::EXTRUDER_TYPE_PRUSA:
     default:
         esteps = 325;
@@ -199,10 +220,13 @@ void llama_apply_extruder_settings() {
     if (marlin_is_client_thread()) {
         // client thread - set variable remotely
         marlin_set_var(MARLIN_VAR_ESTEPS, variant8_flt(esteps));
+        marlin_set_var(MARLIN_VAR_EXTRUDER_REVERSE, variant8_ui8(_eeprom_llama_cache.EXTRUDER_REVERSE));
     } else {
         // server thread - set variable directly
         marlin_server_vars()->esteps = esteps;
+        marlin_server_vars()->extruder_reverse = _eeprom_llama_cache.EXTRUDER_REVERSE;
         marlin_server_handle_var_change(MARLIN_VAR_ESTEPS);
+        marlin_server_handle_var_change(MARLIN_VAR_EXTRUDER_REVERSE);
     }
 }
 

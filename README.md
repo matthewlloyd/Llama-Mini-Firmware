@@ -91,9 +91,8 @@ Select "Extruder" and click to select one of:
 
 - **Prusa**. Stock e-steps for the stock extruder.
 - **Bondtech**. Preset e-steps for the [Bondtech extruder upgrade](https://www.bondtech.se/product/prusa-mini/).
-  This option assumes you have reversed the motor wiring as per Bondtech's instructions.
-- **Bond-Rev**. Also preset e-steps for the [Bondtech extruder upgrade](https://www.bondtech.se/product/prusa-mini/),
-  but this option uses negative e-steps so you don't need to reverse the motor wiring.
+  This option assumes you have reversed the motor wiring as per Bondtech's instructions -
+  if you haven't, you can reverse the extruder motor direction using the "Reverse E" option.
 - **Custom**. The e-steps can be configured using the jog wheel, or by
   sending the `M92 E<steps>` command.
 
