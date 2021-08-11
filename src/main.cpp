@@ -67,6 +67,7 @@
 #include "eeprom.h"
 #include "crc32.h"
 #include "w25x.h"
+#include "llama.h"
 
 /* USER CODE END Includes */
 
@@ -248,6 +249,7 @@ int main(void) {
     int irq = __get_PRIMASK() & 1;
     __enable_irq();
     eeprom_init();
+    eeprom_llama_init();
     uint8_t status = eeprom_get_init_status();
     if (status == EEPROM_INIT_Defaults || status == EEPROM_INIT_Upgraded) {
         // this means we are either starting from defaults or after a FW upgrade -> invalidate the XFLASH dump, since it is not relevant anymore

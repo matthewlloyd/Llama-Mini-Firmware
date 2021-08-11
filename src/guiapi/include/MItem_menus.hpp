@@ -195,3 +195,13 @@ public:
     MI_DEVHASH_IN_QR();
     virtual void OnChange(size_t old_index) override;
 };
+
+class MI_LLAMA_SETTINGS : public WI_LABEL_t {
+    static constexpr const char *const label = N_("Llama Settings");
+
+public:
+    MI_LLAMA_SETTINGS();
+
+protected:
+    virtual void click(IWindowMenu &window_menu) override;
+};

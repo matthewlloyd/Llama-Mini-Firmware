@@ -37,7 +37,11 @@ enum {
     MARLIN_VAR_TIMTOEND = 0x1d, // R:  uint32, oProgressData.oTime2End.mGetValue() or -1 if not valid
     MARLIN_VAR_FAN0_RPM = 0x1e, // R:  uint16, fanctl0.getActualRPM()
     MARLIN_VAR_FAN1_RPM = 0x1f, // R:  uint16, fanctl1.getActualRPM()
-    MARLIN_VAR_MAX = MARLIN_VAR_FAN1_RPM
+    MARLIN_VAR_SKEW_XY  = 0x20,             //RW: float
+    MARLIN_VAR_SKEW_XZ  = 0x21,             //RW: float
+    MARLIN_VAR_SKEW_YZ  = 0x22,             //RW: float
+    MARLIN_VAR_ESTEPS   = 0x23,             //RW: float
+    MARLIN_VAR_MAX = MARLIN_VAR_ESTEPS
 };
 
 // variable masks
@@ -124,6 +128,10 @@ typedef struct _marlin_vars_t {
     float target_bed;                 // bed target temperature [C]
     float z_offset;                   // probe z-offset [mm]
     float display_nozzle;             // nozzle temperature to display [C]
+    float skew_xy;                    // XY skew factor
+    float skew_xz;                    // XZ skew factor
+    float skew_yz;                    // YZ skew factor
+    float esteps;                     // extruder e-steps
     uint32_t print_duration;          // print_job_timer.duration() [ms]
     uint32_t time_to_end;             // oProgressData.oTime2End.mGetValue() [s]
     char *media_LFN;                  // Long-File-Name of the currently selected file - a pointer to a global static buffer

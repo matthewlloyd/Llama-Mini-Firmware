@@ -24,3 +24,4 @@ const SpinConfig_I08_t SpinCnf::timezone_range = { { -12, 12, 1 }, Hour };
 const SpinConfig_U08_t SpinCnf::volume_range = { { 0, 11, 1 }, None }; //crank it up to 11
 const std::array<SpinConfig_I16_t, MenuVars::AXIS_CNT> SpinCnf::axis_ranges = { { SpinConfig_I16_t(MenuVars::axis_ranges[0], mm), SpinConfig_I16_t(MenuVars::axis_ranges[1], mm),
     SpinConfig_I16_t(MenuVars::axis_ranges[2], mm), SpinConfig_I16_t(MenuVars::axis_ranges[3], mm) } };
+const SpinConfig_t<float> SpinCnf::skew_range = { { -1.0, 1.0, 0.0001 }, None, spin_off_opt_t::yes };

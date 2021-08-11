@@ -126,6 +126,10 @@ extern uint32_t marlin_server_get_user_click_count(void);
 
 extern uint32_t marlin_server_get_user_move_count(void);
 
+extern void marlin_server_handle_var_change(int);
+
+extern marlin_vars_t *marlin_server_vars();
+
 #ifdef __cplusplus
 }
 #endif //__cplusplus

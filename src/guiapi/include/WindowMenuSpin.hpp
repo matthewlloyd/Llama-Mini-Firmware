@@ -55,6 +55,7 @@ class WI_SPIN_t : public AddSuper<IWiSpin> {
 public: //todo private
     using Config = SpinConfig_t<T>;
     const Config &config;
+    const char* prt_format = config.prt_format;
 
 protected:
     void printSpinToBuffer();
@@ -93,12 +94,12 @@ invalidate_t WI_SPIN_t<T>::Change(int dif) {
 
 template <class T>
 void WI_SPIN_t<T>::printSpinToBuffer() {
-    snprintf(spin_text_buff.data(), spin_text_buff.size(), config.prt_format, (T)(value));
+    snprintf(spin_text_buff.data(), spin_text_buff.size(), prt_format, (T)(value));
 }
 
 template <>
 inline void WI_SPIN_t<float>::printSpinToBuffer() {
-    snprintf(spin_text_buff.data(), spin_text_buff.size(), config.prt_format, static_cast<double>(value.flt));
+    snprintf(spin_text_buff.data(), spin_text_buff.size(), prt_format, static_cast<double>(value.flt));
 }
 
 using WI_SPIN_I08_t = WI_SPIN_t<int8_t>;
