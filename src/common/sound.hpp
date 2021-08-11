@@ -40,6 +40,7 @@ public:
     void play(eSOUND_TYPE eSoundType);
     void stop();
     void update1ms();
+    void buzz(float frq, uint16_t dur) { _sound(1, frq, dur, 0, 1.0, false); }
 
 private:
     Sound();
