@@ -540,6 +540,7 @@ target_sources(
           src/common/llama.cpp
           $<$<STREQUAL:${PRINTER},MINI>:src/common/minda_broken_cable_detection.cpp>
           $<$<STREQUAL:${PRINTER},MINI>:src/common/MindaRedscreen.cpp>
+          src/marlin_stubs/M117.cpp
           src/marlin_stubs/M300.cpp
           src/marlin_stubs/M330.cpp
           src/marlin_stubs/M50.cpp
@@ -593,6 +594,7 @@ if(GUI)
             src/gui/screen_menu_temperature.cpp
             src/gui/resource.c
             src/gui/window_print_progress.cpp
+            src/gui/window_lcd_message.cpp
             src/gui/window_file_list.cpp
             src/gui/window_temp_graph.cpp
             src/gui/screen_menu_settings.cpp
