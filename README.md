@@ -62,11 +62,24 @@ Once you have done that, you can live and let live-stock.
 
 ### Flash Llama
 
+Whenever you install new firmware, it's good practice to make a note of your
+settings first, particularly your Live Z Offset and your skew coefficients
+if you already have Llama installed.
+
 Download the latest release [here](https://github.com/matthewlloyd/Llama-Mini-Firmware/releases).
 Copy the `.bbf` file to the root of your USB flash drive.
 Follow the instructions [here](https://help.prusa3d.com/en/guide/how-to-update-firmware-mini-mini_128421/)
 to install the firmware. The bootloader will warn you the signature is
 incorrect - select "Ignore".
+
+### First Run
+
+If you lose your Prusa EEPROM settings during the upgrade process,
+when you first run the firmware, Prusa will send you to the initial
+calibration wizard. This can be a problem if you need to set custom e-steps
+before printing anything. Just skip the initial setup wizard,
+use the Llama Settings menu to configure your e-steps, and
+then rerun the setup wizard manually.
 
 ### Livestock to Stock
 
