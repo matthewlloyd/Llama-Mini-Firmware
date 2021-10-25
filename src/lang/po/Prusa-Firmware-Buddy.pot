@@ -344,7 +344,7 @@ msgstr ""
 #: src/gui/guimain.cpp:228
 msgid ""
 "Hi, this is your\n"
-"Original Prusa MINI."
+"Original Llama MINI."
 msgstr ""
 
 #. special handling for the link back to printing screen - i.e. ".." will be renamed to "Home"
@@ -1147,7 +1147,7 @@ msgstr ""
 
 #: src/gui/wizard/screen_wizard.cpp:127
 msgid ""
-"Welcome to the Original Prusa MINI setup wizard. Would you like to continue?"
+"Welcome to the Original Llama MINI setup wizard. Would you like to continue?"
 msgstr ""
 
 #: src/guiapi/include/MItem_tools.hpp:9

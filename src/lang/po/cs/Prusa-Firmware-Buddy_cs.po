@@ -327,10 +327,10 @@ msgstr "Zahřívání..."
 #: src/gui/guimain.cpp:228
 msgid ""
 "Hi, this is your\n"
-"Original Prusa MINI."
+"Original Llama MINI."
 msgstr ""
 "Ahoj, tohle je vaše \n"
-"Original Prusa MINI."
+"Original Llama MINI!"
 
 #: src/gui/screen_home.cpp:72
 msgid "HOME"
@@ -1126,8 +1126,8 @@ msgid "Wed"
 msgstr "St"
 
 #: src/gui/wizard/screen_wizard.cpp:127
-msgid "Welcome to the Original Prusa MINI setup wizard. Would you like to continue?"
-msgstr "Vítejte v průvodci pro Original Prusa MINI. Přejete si pokračovat?"
+msgid "Welcome to the Original Llama MINI setup wizard. Would you like to continue?"
+msgstr "Vítejte v průvodci pro Original Llama MINI. Přejete si pokračovat?"
 
 #: src/guiapi/include/MItem_tools.hpp:9
 msgid "Wizard"
