@@ -67,6 +67,7 @@
 #include "eeprom.h"
 #include "crc32.h"
 #include "w25x.h"
+#include "llama.h"
 
 /* USER CODE END Includes */
 
@@ -200,6 +201,7 @@ extern "C" void EepromSystemInit() {
     __enable_irq();
 
     eeprom_init();
+    eeprom_llama_init();
 
     if (irq == 0)
         __disable_irq();

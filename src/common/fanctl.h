@@ -12,6 +12,21 @@ enum {
     FANCTL_RPM_DELAY = 2000,     //
 };
 
+enum eHOTEND_FAN_SPEED : uint8_t {
+    HOTEND_FAN_SPEED_DEFAULT = 0,
+    HOTEND_FAN_SPEED_50 = 1,
+    HOTEND_FAN_SPEED_60 = 2,
+    HOTEND_FAN_SPEED_70 = 3,
+    HOTEND_FAN_SPEED_80 = 4,
+    HOTEND_FAN_SPEED_90 = 5,
+    HOTEND_FAN_SPEED_100 = 6,
+};
+
+enum ePRINT_FAN_SPEED : uint8_t {
+    PRINT_FAN_SPEED_HALF = 0,
+    PRINT_FAN_SPEED_FULL = 1,
+};
+
 // this structure contain variables for rpm measuement
 // used in class CFanCtlTach
 typedef struct _fanctl_tach_t {
@@ -54,13 +69,14 @@ public:
 
     // setters
     void set_PWM(uint8_t new_pwm);
+    inline void set_max_PWM(uint8_t max_pwm) { max_value = max_pwm; }
     inline void set_PhaseShiftMode(PhaseShiftMode new_pha_mode) { pha_mode = new_pha_mode; }
     void safeState();
 
 private:
     const buddy::hw::OutputPin &m_pin;
     const uint8_t min_value; // minimum pwm value
-    const uint8_t max_value; // maximum pwm value
+    uint8_t max_value;       // maximum pwm value
     union {
         struct {              // flags:
             bool pha_ena : 1; //  phase shift enabled
@@ -139,6 +155,7 @@ public:
 
     // setters
     void setPWM(uint8_t pwm);            // set PWM value - switch to non closed-loop mode
+    inline void setMaxPWM(uint8_t pwm) { m_pwm.set_max_PWM(pwm); }; // set maximum PWM, this is value representing 100% power
     void setPhaseShiftMode(uint8_t psm); // set phase shift mode (none/triangle/random)
     void safeState();
 

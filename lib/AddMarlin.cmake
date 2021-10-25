@@ -31,6 +31,7 @@ add_library(
   Marlin/Marlin/src/gcode/bedlevel/ubl/G29.cpp
   Marlin/Marlin/src/gcode/bedlevel/ubl/M421.cpp
   Marlin/Marlin/src/gcode/calibrate/G28.cpp
+  Marlin/Marlin/src/gcode/calibrate/M852.cpp
   Marlin/Marlin/src/gcode/config/M200-M205.cpp
   Marlin/Marlin/src/gcode/config/M220.cpp
   Marlin/Marlin/src/gcode/config/M221.cpp

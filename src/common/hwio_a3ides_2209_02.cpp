@@ -585,6 +585,18 @@ int digitalRead(uint32_t ulPin) {
     return 0;
 }
 
+uint8_t hwio_fan_control_hotend_fan_speed_percent = 0;
+uint32_t hwio_fan_control_hotend_fan_state = 0;
+void hwio_fan_control_set_hotend_fan_speed_percent(uint8_t percent) {
+    hwio_fan_control_hotend_fan_speed_percent = percent;
+    if (hwio_fan_control_enabled) {
+        digitalWrite(MARLIN_PIN(FAN1), hwio_fan_control_hotend_fan_state);
+    }
+}
+uint8_t _hotend_fan_pwm() {
+    return ((uint32_t) hwio_fan_control_hotend_fan_speed_percent) * 50 / 100;
+}
+
 void digitalWrite(uint32_t ulPin, uint32_t ulVal) {
     if (HAL_GPIO_Initialized) {
         switch (ulPin) {
@@ -610,8 +622,10 @@ void digitalWrite(uint32_t ulPin, uint32_t ulVal) {
             //hwio_fan_set_pwm(_FAN1, ulVal?255:0);
             //_hwio_pwm_analogWrite_set_val(HWIO_PWM_FAN1, ulVal ? _pwm_analogWrite_max[HWIO_PWM_FAN1] : 0);
 #ifdef NEW_FANCTL
-            if (hwio_fan_control_enabled)
-                fanctl_set_pwm(1, ulVal ? (100 * 50 / 255) : 0);
+            if (hwio_fan_control_enabled) {
+                fanctl_set_pwm(1, ulVal ? _hotend_fan_pwm() : 0);
+                hwio_fan_control_hotend_fan_state = ulVal;
+            }
 #else  //NEW_FANCTL
             _hwio_pwm_analogWrite_set_val(HWIO_PWM_FAN1, ulVal ? 100 : 0);
 #endif //NEW_FANCTL

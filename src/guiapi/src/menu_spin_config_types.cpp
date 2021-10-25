@@ -9,4 +9,4 @@ template <>
 const char *const SpinConfig<int>::prt_format = "%d";
 
 template <>
-const char *const SpinConfig<float>::prt_format = "%f";
+const char *const SpinConfig<float>::prt_format = "%.4f";

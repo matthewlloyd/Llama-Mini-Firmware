@@ -22,3 +22,5 @@ ScreenFactory::UniquePtr GetScreenMenuSteelSheets();
 ScreenFactory::UniquePtr GetScreenEeprom();
 ScreenFactory::UniquePtr GetScreenMenuExperimentalSettings();
 ScreenFactory::UniquePtr GetScreenMenuOdometer();
+ScreenFactory::UniquePtr GetScreenMenuFooterSettings();
+ScreenFactory::UniquePtr GetScreenMenuLlamaSettings();
