@@ -439,7 +439,6 @@ void marlin_server_settings_load(void) {
     thermalManager.updatePID();
 #endif
     llama_apply_fan_settings();
-    llama_apply_extruder_settings();
     llama_apply_skew_settings();
 }
 

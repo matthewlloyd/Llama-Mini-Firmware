@@ -56,9 +56,19 @@ void eeprom_llama_init(void) {
 
     osSemaphoreDef(eepromLlamaSema);
     eeprom_llama_sema = osSemaphoreCreate(osSemaphore(eepromLlamaSema), 1);
+
+    // check for Llama at the new EEPROM address first
     st25dv64k_user_read_bytes(EEPROM_LLAMA_ADDRESS, &_eeprom_llama_cache, sizeof(eeprom_llama_vars_t));
     if (!eeprom_llama_check_crc32()) {
-        eeprom_llama_defaults();
+        // if invalid, check for Llama at the old EEPROM address
+        st25dv64k_user_read_bytes(EEPROM_LLAMA_OLD_ADDRESS, &_eeprom_llama_cache, sizeof(eeprom_llama_vars_t));
+        if (eeprom_llama_check_crc32()) {
+            // if found, move to the new EEPROM address
+            st25dv64k_user_write_bytes(EEPROM_LLAMA_ADDRESS, (void *)&_eeprom_llama_cache, EEPROM_LLAMA_DATASIZE);
+        } else {
+            // if not found, use defaults
+            eeprom_llama_defaults();
+        }
     } else if (_eeprom_llama_cache.VERSION < 1 || _eeprom_llama_cache.VERSION > EEPROM_LLAMA_VERSION) {
         eeprom_llama_defaults();
     } else {
@@ -191,42 +201,6 @@ void llama_apply_fan_settings() {
     default:
         hwio_fan_control_set_hotend_fan_speed_percent(38);
         break;
-    }
-}
-
-float llama_compute_extruder_esteps() {
-    if (!_eeprom_llama_cache_loaded) {
-        return 325.f;
-    }
-    float esteps;
-    switch (_eeprom_llama_cache.EXTRUDER_TYPE) {
-    case eEXTRUDER_TYPE::EXTRUDER_TYPE_USER_USE_M92:
-        // don't set e-steps; let user configure with M92 in start g-code
-        esteps = _eeprom_llama_cache.EXTRUDER_ESTEPS;
-        break;
-    case eEXTRUDER_TYPE::EXTRUDER_TYPE_BONDTECH:
-        esteps = 415;
-        break;
-    case eEXTRUDER_TYPE::EXTRUDER_TYPE_PRUSA:
-    default:
-        esteps = 325;
-        break;
-    }
-    return esteps;
-}
-
-void llama_apply_extruder_settings() {
-    float esteps = llama_compute_extruder_esteps();
-    if (marlin_is_client_thread()) {
-        // client thread - set variable remotely
-        marlin_set_var(MARLIN_VAR_ESTEPS, variant8_flt(esteps));
-        marlin_set_var(MARLIN_VAR_EXTRUDER_REVERSE, variant8_ui8(_eeprom_llama_cache.EXTRUDER_REVERSE));
-    } else {
-        // server thread - set variable directly
-        marlin_server_vars()->esteps = esteps;
-        marlin_server_vars()->extruder_reverse = _eeprom_llama_cache.EXTRUDER_REVERSE;
-        marlin_server_handle_var_change(MARLIN_VAR_ESTEPS);
-        marlin_server_handle_var_change(MARLIN_VAR_EXTRUDER_REVERSE);
     }
 }
 

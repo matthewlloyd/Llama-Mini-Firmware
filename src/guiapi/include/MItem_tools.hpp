@@ -416,34 +416,6 @@ public:
     virtual void OnChange(size_t old_index) override;
 };
 
-class MI_EXTRUDER_TYPE : public WI_SWITCH_t<3> {
-    constexpr static const char *const label = "Extruder";
-
-    constexpr static const char *str_Prusa = "Prusa";
-    constexpr static const char *str_Bondtech = "Bondtech";
-    constexpr static const char *str_UserUseM92 = "Custom";
-
-public:
-    MI_EXTRUDER_TYPE();
-    virtual void OnChange(size_t old_index) override;
-};
-
-class MI_EXTRUDER_ESTEPS : public WI_SPIN_FL_t {
-    constexpr static const char *const label = N_("E-Steps");
-
-public:
-    MI_EXTRUDER_ESTEPS();
-    virtual void OnClick() override;
-};
-
-class MI_EXTRUDER_REVERSE : public WI_SWITCH_OFF_ON_t {
-    constexpr static const char *const label = N_("Reverse E");
-
-public:
-    MI_EXTRUDER_REVERSE();
-    virtual void OnChange(size_t old_index) override;
-};
-
 class MI_HOTEND_FAN_SPEED : public WI_SWITCH_t<7> {
     constexpr static const char *const label = "Hotend Fan";
 
@@ -468,7 +440,7 @@ public:
     virtual void OnChange(size_t old_index) override;
 };
 
-class MI_SKEW_XY : public WI_SPIN_FL_t {
+class MI_SKEW_XY : public WiSpinFlt {
     constexpr static const char *const label = N_("Skew XY");
 
 public:
@@ -476,7 +448,7 @@ public:
     virtual void OnClick() override;
 };
 
-class MI_SKEW_XZ : public WI_SPIN_FL_t {
+class MI_SKEW_XZ : public WiSpinFlt {
     constexpr static const char *const label = N_("Skew XZ");
 
 public:
@@ -484,7 +456,7 @@ public:
     virtual void OnClick() override;
 };
 
-class MI_SKEW_YZ : public WI_SPIN_FL_t {
+class MI_SKEW_YZ : public WiSpinFlt {
     constexpr static const char *const label = N_("Skew YZ");
 
 public:

@@ -46,7 +46,8 @@ static const eeprom_entry_t eeprom_llama_map[] = {
 };
 
 enum {
-    EEPROM_LLAMA_ADDRESS = 0x0600,
+    EEPROM_LLAMA_OLD_ADDRESS = 0x0600,
+    EEPROM_LLAMA_ADDRESS = 0x0700,
     EEPROM_LLAMA_VERSION = 2
 };
 
@@ -112,6 +113,4 @@ extern variant8_t eeprom_llama_get_var(uint8_t id);
 extern void eeprom_llama_set_var(uint8_t id, variant8_t var, bool update_crc32);
 
 void llama_apply_fan_settings();
-float llama_compute_extruder_esteps();
-void llama_apply_extruder_settings();
 void llama_apply_skew_settings();

@@ -200,8 +200,10 @@ extern "C" void EepromSystemInit() {
     int irq = __get_PRIMASK() & 1;
     __enable_irq();
 
-    eeprom_init();
+    // initialize Llama Eeprom first so that old settings don't get overwritten
+    // by Prusa's extension of their EEPROM address range from 0x500-0x600 to 0x500-0x700
     eeprom_llama_init();
+    eeprom_init();
 
     if (irq == 0)
         __disable_irq();

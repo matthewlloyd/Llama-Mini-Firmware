@@ -30,8 +30,7 @@
 
 
 using Screen = ScreenMenu<EHeader::Off, EFooter::On, HelpLines_None, MI_RETURN,
-    MI_EXTRUDER_TYPE, MI_EXTRUDER_ESTEPS, MI_EXTRUDER_REVERSE, MI_HOTEND_FAN_SPEED,
-    MI_SKEW_ENABLED, MI_SKEW_XY, MI_SKEW_XZ, MI_SKEW_YZ>
+    MI_HOTEND_FAN_SPEED, MI_SKEW_ENABLED, MI_SKEW_XY, MI_SKEW_XZ, MI_SKEW_YZ>
 ;
 
 class ScreenMenuLlamaSettings : public Screen {
@@ -48,18 +47,6 @@ public:
         if (ev != GUI_event_t::CHILD_CLICK) {
             SuperWindowEvent(sender, ev, param);
             return;
-        }
-
-        int extruder_type = variant_get_ui8(eeprom_llama_get_var(EEVAR_LLAMA_EXTRUDER_TYPE));
-        if (extruder_type != last_extruder_type) {
-            last_extruder_type = extruder_type;
-            Item<MI_EXTRUDER_ESTEPS>().SetVal(llama_compute_extruder_esteps());
-            if (extruder_type == eEXTRUDER_TYPE::EXTRUDER_TYPE_USER_USE_M92)
-                Item<MI_EXTRUDER_ESTEPS>().Enable();
-            else
-                Item<MI_EXTRUDER_ESTEPS>().Disable();
-            menu.unconditionalDrawItem(1);
-            menu.unconditionalDrawItem(2);
         }
     }
 };

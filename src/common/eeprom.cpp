@@ -19,7 +19,6 @@
 #include <bitset>
 
 static const constexpr uint8_t EEPROM__PADDING = 4;
-static const constexpr uint8_t EEPROM_MAX_NAME = 16;               // maximum name length (with '\0')
 static const constexpr uint16_t EEPROM_MAX_DATASIZE = 512;         // maximum datasize
 static const constexpr uint16_t EEPROM_FIRST_VERSION_CRC = 0x0004; // first eeprom version with crc support
 
