@@ -10,8 +10,6 @@ One of Prusa's llamas escaped from HQ (:llama::running_man:) and decided to make
 own version of the firmware for the Prusa Mini. He's added quite
 a few goodies:
 
-* **Configurable E-steps**: Adds a menu option to configure e-steps, with presets for the
-  Bondtech extruder (with and without reversed wires).
 * **Hotend fan speed**: Adds a menu option to unlock the hotend fan speed
   and increase it from the Prusa Firmware's default 38% to anywhere from 50-100%.
 * **Skew compensation**: Turns on skew compensation in Marlin and allows it
@@ -21,6 +19,8 @@ a few goodies:
 * **Sound**: Adds support for `M300` (play a sound).
 * **PID tuning**: Automatically writes PID settings to EEPROM after `M303 U1` (autotune),
   `M301` (set hotend PID), and `M304` (set bed PID).
+* **Max Temps**: Raises the maximum bed temperature from 100C to 110C
+  and nozzle temperature from 290C to 300C (use with caution!).
 
 All settings are automatically saved to EEPROM and loaded on boot.
 
@@ -99,6 +99,11 @@ To configure Llama settings, open the Settings menu and select "Llama Settings".
 Llogical!
 
 ### Configuring E-steps
+
+New in v1.0.7: This can now be done using Prusa's own "Experimental Settings" menu,
+which is shown by default as a menu item next to "Llama Settings" in this firmware.
+
+#### For Llama versions v1.0.6 and below
 
 Select "Extruder" and click to select one of:
 
