@@ -215,9 +215,7 @@ void llama_apply_skew_settings() {
     }
     if (marlin_is_client_thread()) {
         // client thread - set variables remotely
-        marlin_set_var(MARLIN_VAR_SKEW_XY, xy);
-        marlin_set_var(MARLIN_VAR_SKEW_XZ, xz);
-        marlin_set_var(MARLIN_VAR_SKEW_YZ, yz);
+        marlin_gcode_printf("M852 I%f J%f K%f", xy, xz, yz);
     } else {
         // server thread - set variables directly
         marlin_server_vars()->skew_xy = xy;
