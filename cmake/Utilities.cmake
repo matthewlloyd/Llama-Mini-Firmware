@@ -44,6 +44,25 @@ function(get_dependency_directory dependency var)
       )
 endfunction()
 
+function(get_dependency_version dependency var)
+  execute_process(
+    COMMAND "${Python3_EXECUTABLE}" "${PROJECT_ROOT_DIR}/utils/bootstrap.py"
+            "--print-dependency-version" "${dependency}"
+    OUTPUT_VARIABLE DEPENDENCY_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE RETVAL
+    )
+
+  if(NOT "${RETVAL}" STREQUAL "0")
+    message(FATAL_ERROR "Failed to find directory with ${dependency}")
+  endif()
+
+  set(${var}
+      ${DEPENDENCY_VERSION}
+      PARENT_SCOPE
+      )
+endfunction()
+
 function(objcopy target format suffix)
   add_custom_command(
     TARGET ${target} POST_BUILD
@@ -62,21 +81,89 @@ function(report_size target)
     )
 endfunction()
 
-function(pack_firmware target fw_version build_number printer_type signing_key)
+function(pack_firmware target)
+  # parse arguments
+  set(one_value_args FW_VERSION BUILD_NUMBER PRINTER_TYPE SIGNING_KEY BBF_VERSION OUTPUT_PATH)
+  set(multi_value_args RESOURCE_IMAGES RESOURCE_IMAGE_NAMES)
+  cmake_parse_arguments(ARG "" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+  # calculate path for binary image of the firmware
   set(bin_firmware_path "${CMAKE_CURRENT_BINARY_DIR}/${target}.bin")
-  if(SIGNING_KEY)
-    set(sign_opts "--key" "${signing_key}")
+
+  # signing options
+  if(ARG_SIGNING_KEY)
+    set(sign_opts "--key" "${ARG_SIGNING_KEY}")
   else()
     set(sign_opts "--no-sign")
   endif()
+
+  list(LENGTH ARG_RESOURCE_IMAGES resource_images_len)
+  list(LENGTH ARG_RESOURCE_IMAGE_NAMES resource_image_names_len)
+  if(NOT resource_images_len EQUAL resource_image_names_len)
+    message(FATAL_ERROR "RESOURCE_IMAGE and RESOURCE_IMAGE_NAMES must have the same length!")
+  endif()
+
+  set(resources_opts)
+  if(resource_images_len GREATER "0")
+    math(EXPR resource_images_max_idx "${resource_images_len} - 1")
+    foreach(resource_image_idx RANGE "${resource_images_max_idx}")
+      list(GET ARG_RESOURCE_IMAGES ${resource_image_idx} resources_image)
+      list(GET ARG_RESOURCE_IMAGE_NAMES ${resource_image_idx} resources_image_name)
+
+      # write block size to a binary file
+      set(block_size_file "${CMAKE_CURRENT_BINARY_DIR}/bbf_${resources_image}_block_size.bin")
+      get_target_property(block_size ${resources_image} LFS_IMAGE_BLOCK_SIZE)
+      create_file_with_value("${block_size_file}" "<I" "${block_size}")
+
+      # write block count to a binary file
+      set(block_count_file "${CMAKE_CURRENT_BINARY_DIR}/bbf_${resources_image}_block_count.bin")
+      get_target_property(block_count ${resources_image} LFS_IMAGE_BLOCK_COUNT)
+      create_file_with_value("${block_count_file}" "<I" "${block_count}")
+
+      # write hash to a binary file
+      set(content_hash_file "${CMAKE_CURRENT_BINARY_DIR}/bbf_${resources_image}_hash.bin")
+      lfs_image_generate_hash_bin_file(${resources_image} "${content_hash_file}")
+
+      list(
+        APPEND resources_opts
+               "--tlv"
+               "${resources_image_name}:$<TARGET_PROPERTY:${resources_image},LFS_IMAGE_LOCATION>"
+               "${resources_image_name}_BLOCK_SIZE:${block_size_file}"
+               "${resources_image_name}_BLOCK_COUNT:${block_count_file}"
+               "${resources_image_name}_HASH:${content_hash_file}"
+        )
+
+      add_custom_target(
+        bbf-dependencies-${resources_image} DEPENDS "${block_size_file}" "${block_count_file}"
+                                                    "${content_hash_file}"
+        )
+      add_dependencies(${target} bbf-dependencies-${resources_image})
+    endforeach()
+  endif()
+
+  if(ARG_BBF_VERSION)
+    set(bbf_version_opts "--bbf-version" "${ARG_BBF_VERSION}")
+  endif()
+
+  if(ARG_OUTPUT_PATH)
+    set(output_path_opts "--output-file" "${ARG_OUTPUT_PATH}")
+  endif()
+
   add_custom_command(
     TARGET ${target} POST_BUILD
-    COMMAND "${CMAKE_OBJCOPY}" -O binary -S "$<TARGET_FILE:${target}>" "${bin_firmware_path}"
-    COMMAND echo "" # visually separate the output
+    # generate .bin file
     COMMAND
-      "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/utils/pack_fw.py" --version="${fw_version}"
-      --printer-type "${printer_type}" --printer-version "1" ${sign_opts} "${bin_firmware_path}"
-      --build-number "${build_number}"
+      "${CMAKE_OBJCOPY}" -O binary -S "$<TARGET_FILE:${target}>" "${bin_firmware_path}"
+
+
+      # visually separate the output
+    COMMAND echo ""
+            # generate .bbf file
+    COMMAND
+      "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/utils/pack_fw.py" --version="${ARG_FW_VERSION}"
+      --printer-type "${ARG_PRINTER_TYPE}" --printer-version "1" --build-number
+      "${ARG_BUILD_NUMBER}" ${sign_opts} ${resources_opts} ${bbf_version_opts} ${output_path_opts}
+      -- "${bin_firmware_path}"
     )
 endfunction()
 
@@ -119,4 +206,38 @@ function(rfc1123_datetime var)
       ${RFC1123_DATETIME}
       PARENT_SCOPE
       )
+endfunction()
+
+function(create_file_with_value file_path format value)
+  set(PYTHON_CODE "import sys" "import struct" "f = open(sys.argv[1], 'wb')"
+                  "f.write(struct.pack(sys.argv[2], int(sys.argv[3])))" "f.close()"
+      )
+  add_custom_command(
+    OUTPUT ${file_path}
+    COMMAND ${Python3_EXECUTABLE} "-c" "${PYTHON_CODE}" "${file_path}" "${format}" "${value}"
+    VERBATIM
+    )
+endfunction()
+
+function(gzip_file input_file output_file)
+  set(PYTHON_CODE
+      "import sys"
+      "import io"
+      "import gzip"
+      "input_file = open(sys.argv[1], 'rb')"
+      "bytes_io = io.BytesIO()"
+      "gzip_file = gzip.GzipFile(fileobj=bytes_io, mode='wb', mtime=0)"
+      "gzip_file.write(input_file.read())"
+      "gzip_file.close()"
+      "bytes_io.seek(0)"
+      "output_file = open(sys.argv[2], 'wb')"
+      "output_file.write(bytes_io.read())"
+      )
+  add_custom_command(
+    OUTPUT "${output_file}"
+    DEPENDS "${input_file}"
+    COMMAND ${Python3_EXECUTABLE} "-c" "${PYTHON_CODE}" "${input_file}" "${output_file}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    VERBATIM
+    )
 endfunction()

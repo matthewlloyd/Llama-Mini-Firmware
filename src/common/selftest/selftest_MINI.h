@@ -2,8 +2,8 @@
 #pragma once
 
 #include <inttypes.h>
-#include "ff.h"
 #include "eeprom.h"
+#include <stdio.h>
 
 #define SELFTEST_MAX_LOG_PRINTF 128
 #define SELFTEST_LOOP_PERIODE   50
@@ -83,10 +83,10 @@ public:
 
 protected:
     void phaseStart();
-    bool phaseFans(const selftest_fan_config_t &config_fan0, const selftest_fan_config_t &config_fan1);
+    bool phaseFans(const selftest_fan_config_t &config_print_fan, const selftest_fan_config_t &config_heatbreak_fan);
     bool phaseHome();
-    bool phaseAxis(const selftest_axis_config_t &config_axis, CSelftestPart_Axis **ppaxis, uint16_t fsm_phase, uint8_t progress_add, uint8_t progress_mul);
-    bool phaseHeaters(const selftest_heater_config_t &config_nozzle, const selftest_heater_config_t &config_bed, CFanCtl &fan0, CFanCtl &fan1);
+    bool phaseAxis(const selftest_axis_config_t &config_axis, CSelftestPart_Axis **ppaxis);
+    bool phaseHeaters(const selftest_heater_config_t &config_nozzle, const selftest_heater_config_t &config_bed, CFanCtl &printFan, CFanCtl &heatBreakfan);
     void phaseFinish();
     bool phaseWait();
 
@@ -101,15 +101,15 @@ protected:
     SelftestState_t m_State;
     SelftestMask_t m_Mask;
     uint32_t m_Time;
-    CSelftestPart_Fan *m_pFan0;
-    CSelftestPart_Fan *m_pFan1;
+    CSelftestPart_Fan *m_pFanPrint;
+    CSelftestPart_Fan *m_pFanHeatBreak;
     CSelftestPart_Axis *m_pXAxis;
     CSelftestPart_Axis *m_pYAxis;
     CSelftestPart_Axis *m_pZAxis;
     CSelftestPart_Heater *m_pHeater_Nozzle;
     CSelftestPart_Heater *m_pHeater_Bed;
     FSM_Holder *m_pFSM;
-    FIL m_fil;
+    int m_fd;
     bool m_filIsValid;
     SelftestHomeState_t m_HomeState;
 };

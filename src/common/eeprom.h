@@ -5,36 +5,51 @@
 #include <stdbool.h>
 #include "variant8.h"
 #include "eeprom_function_api.h"
+#include <stddef.h>
 
 enum {
     EEPROM_ADDRESS = 0x0500, // uint16_t
-    EEPROM_VERSION = 10,     // uint16_t
+    EEPROM_VERSION = 11,     // uint16_t
 };
+
+#define EEPROM_LAST_VERSION_WITH_OLD_CRC 10
 
 #define EEPROM_FEATURE_PID_NOZ 0x0001
 #define EEPROM_FEATURE_PID_BED 0x0002
 #define EEPROM_FEATURE_LAN     0x0004
 #define EEPROM_FEATURE_SHEETS  0x0008
 #define EEPROM_FEATURES        (EEPROM_FEATURE_PID_NOZ | EEPROM_FEATURE_PID_BED | EEPROM_FEATURE_LAN | EEPROM_FEATURE_SHEETS)
-
+#define DEFAULT_HOST_NAME      "PrusaMINI"
 enum {
     MAX_SHEET_NAME_LENGTH = 8,
 };
 
+// sheets must be defined even when they are not used, to be able to import data from old eeprom
+typedef struct
+{
+    char name[MAX_SHEET_NAME_LENGTH]; //!< Can be null terminated, doesn't need to be null terminated
+    float z_offset;                   //!< Z_BABYSTEP_MIN .. Z_BABYSTEP_MAX = Z_BABYSTEP_MIN*2/1000 [mm] .. Z_BABYSTEP_MAX*2/1000 [mm]
+} Sheet;
 enum {
+    EEPROM_SHEET_SIZEOF = sizeof(Sheet)
+};
+
+enum eevar_id {
     // basic variables
-    EEVAR_VERSION = 0x00,         // uint16_t eeprom version
-    EEVAR_FEATURES = 0x01,        // uint16_t feature mask
-    EEVAR_DATASIZE = 0x02,        // uint16_t eeprom data size
-    EEVAR_FW_VERSION = 0x03,      // uint16_t encoded firmware version (e.g. 403 for 4.0.3)
-    EEVAR_FW_BUILD = 0x04,        // uint16_t firmware build number
-    EEVAR_FILAMENT_TYPE = 0x05,   // uint8_t  filament type
-    EEVAR_FILAMENT_COLOR = 0x06,  // uint32_t filament color (rgb)
-    EEVAR_RUN_SELFTEST = 0x07,    // uint8_t  selftest flag
-    EEVAR_RUN_XYZCALIB = 0x08,    // uint8_t  xyz calibration flag
-    EEVAR_RUN_FIRSTLAY = 0x09,    // uint8_t  first layer calibration flag
-    EEVAR_FSENSOR_ENABLED = 0x0a, // uint8_t  fsensor state
-    EEVAR_ZOFFSET = 0x0b,         // float    zoffset
+    EEVAR_VERSION = 0x00,                     // uint16_t eeprom version
+    EEVAR_FEATURES = 0x01,                    // uint16_t feature mask
+    EEVAR_DATASIZE = 0x02,                    // uint16_t eeprom data size
+    EEVAR_FW_VERSION = 0x03,                  // uint16_t encoded firmware version (e.g. 403 for 4.0.3)
+    EEVAR_FW_BUILD = 0x04,                    // uint16_t firmware build number
+    EEVAR_FILAMENT_TYPE = 0x05,               // uint8_t  filament type
+    EEVAR_FILAMENT_COLOR = 0x06,              // uint32_t filament color (rgb)
+    EEVAR_RUN_SELFTEST = 0x07,                // bool     selftest flag
+    EEVAR_RUN_XYZCALIB = 0x08,                // bool     xyz calibration flag
+    EEVAR_RUN_FIRSTLAY = 0x09,                // bool     first layer calibration flag
+    EEVAR_FSENSOR_ENABLED = 0x0a,             // bool     fsensor state
+    EEVAR_ZOFFSET_DO_NOT_USE_DIRECTLY = 0x0b, // float zoffset
+// use float eeprom_get_z_offset() / bool eeprom_set_z_offset(float value) instead
+// because EEVAR_ZOFFSET_DO_NOT_USE_DIRECTLY is unused in case sheets are enabled
 
 // nozzle PID variables
 #if (EEPROM_FEATURES & EEPROM_FEATURE_PID_NOZ)
@@ -67,7 +82,7 @@ enum {
     EEVAR_SOUND_VOLUME = 0x1b, // uint8_t
     EEVAR_LANGUAGE = 0x1c,     // uint16_t
     EEVAR_FILE_SORT = 0x1d,    // uint8_t  filebrowser file sort options
-    EEVAR_MENU_TIMEOUT = 0x1e, // uint8_t on / off menu timeout flag
+    EEVAR_MENU_TIMEOUT = 0x1e, // bool on / off menu timeout flag
     EEVAR_ACTIVE_SHEET = 0x1f,
     EEVAR_SHEET_PROFILE0 = 0x20,
     EEVAR_SHEET_PROFILE1 = 0x21,
@@ -76,13 +91,13 @@ enum {
     EEVAR_SHEET_PROFILE4 = 0x24,
     EEVAR_SHEET_PROFILE5 = 0x25,
     EEVAR_SHEET_PROFILE6 = 0x26,
-    EEVAR_SHEET_PROFILE7 = 0x27,
-    EEVAR_SELFTEST_RESULT = 0x28, // uint32_t, two bits for each selftest part
-    EEVAR_DEVHASH_IN_QR = 0x29,   // uint8_t on / off sending UID in QR
+    EEVAR_SHEET_PROFILE_LAST = 0x27, //!< All SHEET_PROFILEs must be allocated consecutively.
+    EEVAR_SELFTEST_RESULT = 0x28,    // uint32_t, two bits for each selftest part
+    EEVAR_DEVHASH_IN_QR = 0x29,      // bool on / off sending UID in QR
     EEVAR_FOOTER_SETTING = 0x2a,
     EEVAR_FOOTER_DRAW_TYPE = 0x2b,
-    EEVAR_FAN_CHECK_ENABLED = 0x2c,   // uint8_t on / off fan check
-    EEVAR_FS_AUTOLOAD_ENABLED = 0x2d, // uint8_t on / off fs autoload
+    EEVAR_FAN_CHECK_ENABLED = 0x2c,   // bool on / off fan check
+    EEVAR_FS_AUTOLOAD_ENABLED = 0x2d, // bool on / off fs autoload
     EEVAR_ODOMETER_X = 0x2e,          // float
     EEVAR_ODOMETER_Y = 0x2f,          // float
     EEVAR_ODOMETER_Z = 0x30,          // float
@@ -100,24 +115,47 @@ enum {
     AXIS_RMS_CURRENT_MA_Z = 0x3c,     // uint16_t, used to initialize trinamic
     AXIS_RMS_CURRENT_MA_E0 = 0x3d,    // uint16_t, used to initialize trinamic, must contain "E0" to work with marlin macros
     AXIS_Z_MAX_POS_MM = 0x3e,         // float, used in marlin Z_MAX_POS macro
-    EEVAR_ODOMETER_TIME = 0x3f,       //uin32_t total print duration
-    EEVAR__PADDING = 0x40,            // 1..4 chars, to ensure (DATASIZE % 4 == 0)
+    EEVAR_ODOMETER_TIME = 0x3f,       // uin32_t total print duration
+    EEVAR_ACTIVE_NETDEV = 0x40,       // active network device
+    EEVAR_PL_RUN = 0x41,              // active network device
+    EEVAR_PL_API_KEY = 0x42,          // active network device
 
-    EEVAR_CRC32 = 0x41, // uint32_t crc32 for
+// wifi variables (comes under the same feature flag as eth LAN)
+// FIXME: EEPROM_FEATURE_LAN probably can't be turned off, the .cpp file won't work then.
+#if (EEPROM_FEATURES & EEPROM_FEATURE_LAN)
+    EEVAR_WIFI_FLAG = 0x43,      // lan_flag & 1 -> On = 0/off = 1, lan_flag & 2 -> dhcp = 0/static = 1, lan_flag & 0b1100 -> ap_sec_t security
+    EEVAR_WIFI_IP4_ADDR = 0x44,  // X.X.X.X address encoded in uint32
+    EEVAR_WIFI_IP4_MSK = 0x45,   // X.X.X.X address encoded in uint32
+    EEVAR_WIFI_IP4_GW = 0x46,    // X.X.X.X address encoded in uint32
+    EEVAR_WIFI_IP4_DNS1 = 0x47,  // X.X.X.X address encoded in uint32
+    EEVAR_WIFI_IP4_DNS2 = 0x48,  // X.X.X.X address encoded in uint32
+    EEVAR_WIFI_HOSTNAME = 0x49,  // 20char string
+    EEVAR_WIFI_AP_SSID = 0x4a,   // 32char string
+    EEVAR_WIFI_AP_PASSWD = 0x4b, // 64char string
+#endif                           // (EEPROM_FEATURES & EEPROM_FEATURE_LAN)
+
+    EEVAR_USB_MSC_ENABLED = 0x4c, // bool, on/off
+
+    EEVAR_CRC32 = 0x4d, // uint32_t crc32 for
 };
 
 enum {
     LAN_HOSTNAME_MAX_LEN = 20,
     CONNECT_TOKEN_SIZE = 20,
-    LAN_EEFLG_ONOFF = 1, //EEPROM flag for user-defined settings (SW turn OFF/ON of the LAN)
-    LAN_EEFLG_TYPE = 2,  //EEPROM flag for user-defined settings (Switch between dhcp and static)
+    PL_API_KEY_SIZE = 16,
+    LAN_EEFLG_ONOFF = 1,     //EEPROM flag for user-defined settings (SW turn OFF/ON of the LAN)
+    LAN_EEFLG_TYPE = 2,      //EEPROM flag for user-defined settings (Switch between dhcp and static)
+    WIFI_EEFLG_SEC = 0b1100, // Wifi security (ap_sec_t).
+    WIFI_MAX_SSID_LEN = 32,
+    WIFI_MAX_PASSWD_LEN = 64,
 };
 
-#define EEPROM_MAX_NAME (16)               // maximum name length (with '\0')
+#define EEPROM_MAX_NAME (16) // maximum name length (with '\0')
 
 // flags will be used also for selective variable reset default values in some cases (shipping etc.))
 #define EEVAR_FLG_READONLY (0x0001) // variable is read only
 
+#pragma pack(push, 1)
 // eeprom map entry structure
 typedef struct _eeprom_entry_t {
     const char name[EEPROM_MAX_NAME];
@@ -125,6 +163,7 @@ typedef struct _eeprom_entry_t {
     uint8_t count;  // number of elements
     uint16_t flags; // flags
 } eeprom_entry_t;
+#pragma pack(pop)
 
 #define SelftestResult_Unknown 0
 #define SelftestResult_Skipped 1
@@ -133,17 +172,19 @@ typedef struct _eeprom_entry_t {
 
 typedef union _SelftestResultEEprom_t {
     struct {
-        uint8_t fan0 : 2;       // bit 0-1
-        uint8_t fan1 : 2;       // bit 2-3
-        uint8_t xaxis : 2;      // bit 4-5
-        uint8_t yaxis : 2;      // bit 6-7
-        uint8_t zaxis : 2;      // bit 8-9
-        uint8_t nozzle : 2;     // bit 10-11
-        uint8_t bed : 2;        // bit 12-13
-        uint32_t reserved : 18; // bit 14-31
+        uint8_t printFan : 2;     // bit 0-1
+        uint8_t heatBreakFan : 2; // bit 2-3
+        uint8_t xaxis : 2;        // bit 4-5
+        uint8_t yaxis : 2;        // bit 6-7
+        uint8_t zaxis : 2;        // bit 8-9
+        uint8_t nozzle : 2;       // bit 10-11
+        uint8_t bed : 2;          // bit 12-13
+        uint8_t reserved0 : 2;    // bit 14-15
+        uint16_t reserved1;       // bit 16-31
     };
     uint32_t ui32;
 } SelftestResultEEprom_t;
+//if I use uint32_t reserved : 18 for bits 14 - 31, size on 64bit system is 8, I don't know why
 #ifdef __cplusplus
 static_assert(sizeof(SelftestResultEEprom_t) == sizeof(uint32_t), "Incorrect SelftestResultEEprom_t size");
 #endif //__cplusplus
@@ -157,13 +198,16 @@ typedef enum {
 } eeprom_init_status_t;
 
 #ifdef __cplusplus
+    #include <limits>
 extern "C" {
+inline constexpr size_t eeprom_num_sheets = EEVAR_SHEET_PROFILE_LAST - EEVAR_SHEET_PROFILE0 + 1;
+inline constexpr float eeprom_z_offset_uncalibrated = std::numeric_limits<float>::max();
 #endif //__cplusplus
 
 /// initialize eeprom
 /// can be called multiple times, non first call will just return status
 /// cannot have function to just return static variable,
-///          because this code is called before inicialization of static variables
+///          because this code is called before initialization of static variables
 ///
 /// @returns EEPROM_INIT_Normal - normal init (eeprom data valid)
 ///          EEPROM_INIT_Defaults - defaults loaded
@@ -175,107 +219,53 @@ extern eeprom_init_status_t eeprom_init(void);
 extern void eeprom_defaults(void);
 
 // get variable value as variant8
-extern variant8_t eeprom_get_var(uint8_t id);
+extern variant8_t eeprom_get_var(enum eevar_id id);
+
+extern float eeprom_get_flt(enum eevar_id id);
+extern char *eeprom_get_pch(enum eevar_id id);
+extern uint8_t eeprom_get_uia(enum eevar_id id, uint8_t index);
+extern uint32_t eeprom_get_ui32(enum eevar_id id);
+extern int32_t eeprom_get_i32(enum eevar_id id);
+extern uint16_t eeprom_get_ui16(enum eevar_id id);
+extern uint8_t eeprom_get_ui8(enum eevar_id id);
+extern int8_t eeprom_get_i8(enum eevar_id id);
+extern bool eeprom_get_bool(enum eevar_id id);
+extern Sheet eeprom_get_sheet(uint32_t index);
 
 // set variable value as variant8
-extern void eeprom_set_var(uint8_t id, variant8_t var);
+extern void eeprom_set_var(enum eevar_id id, variant8_t var);
+
+extern void eeprom_set_i8(enum eevar_id id, int8_t i8);
+extern void eeprom_set_bool(enum eevar_id id, bool b);
+extern void eeprom_set_ui8(enum eevar_id id, uint8_t ui8);
+extern void eeprom_set_i16(enum eevar_id id, int16_t i16);
+extern void eeprom_set_ui16(enum eevar_id id, uint16_t ui16);
+extern void eeprom_set_i32(enum eevar_id id, int32_t i32);
+extern void eeprom_set_ui32(enum eevar_id id, uint32_t ui32);
+extern void eeprom_set_flt(enum eevar_id id, float flt);
+extern void eeprom_set_pchar(enum eevar_id id, char *pch, uint16_t count, int init);
+extern bool eeprom_set_sheet(uint32_t index, Sheet sheet);
 
 // get number of variables
 extern uint8_t eeprom_get_var_count(void);
 
 // get variable name
-extern const char *eeprom_get_var_name(uint8_t id);
+extern const char *eeprom_get_var_name(enum eevar_id id);
+
+// find variables eevar_id based on its name (without the EEPROM_ prefix); return true on success
+extern bool eeprom_find_var_by_name(const char *name, enum eevar_id *var_id_out);
 
 // format variable value to string (some variables can have specific formating)
-extern int eeprom_var_format(char *str, unsigned int size, uint8_t id, variant8_t var);
+extern int eeprom_var_format(char *str, unsigned int size, enum eevar_id id, variant8_t var);
+
+// parse variant8_t from a string previously formatted by eeprom_var_format
+extern variant8_t eeprom_var_parse(enum eevar_id id, char *str);
 
 // fill range 0x0000..0x0800 with 0xff
 extern void eeprom_clear(void);
 
 // PUT test
 int8_t eeprom_test_PUT(const unsigned int);
-
-///////////////////////////////////////////////////////////////////////////////
-/// @brief Iterate across the profiles and switch to the next calibrated.
-///
-/// Printer use print sheet profile on the index 0 as a default so the method
-/// in the worst case iterate across entire profiles and return index 0 when
-/// not any other profile is calibrated yet.
-/// @return Index of the next calibrated profile.
-extern uint32_t sheet_next_calibrated();
-
-///////////////////////////////////////////////////////////////////////////////
-/// @brief Determine if the given sheet profile is calibrated.
-///
-/// In case the index of the given print sheet profile is bigger than the
-/// MAX_SHEETS method return false.
-/// @param[in] index Index of the sheet profile
-/// @return True when the profile is calibrated, False othewise.
-extern bool sheet_is_calibrated(uint32_t);
-
-///////////////////////////////////////////////////////////////////////////////
-/// @brief Select the given print sheet profile as an active for the printer.
-///
-/// In case the index of the given print sheet profile is bigger than the
-/// MAX_SHEETS or sheet is not calibrated method return false.
-/// @param[in] index Index of the sheet profile
-/// @return True when the profile can be selected, False othewise.
-extern bool sheet_select(uint32_t);
-
-///////////////////////////////////////////////////////////////////////////////
-/// @brief Calibrate the given print sheet profile as an active for the printer.
-///
-/// In case the index of the given print sheet profile is bigger than the
-/// MAX_SHEETS method return false.
-/// @param[in] index Index of the sheet profile
-/// @return True when the profile can be selected, False othewise.
-extern bool sheet_calibrate(uint32_t);
-
-///////////////////////////////////////////////////////////////////////////////
-/// @brief Reset the given print sheet profile to the uncalibrated state.
-///
-/// In case the index of the given print sheet profile is bigger than the
-/// MAX_SHEETS method return false.
-/// @param[in] index Index of the sheet profile
-/// @return True when the profile was reset, False othewise.
-extern bool sheet_reset(uint32_t);
-
-///////////////////////////////////////////////////////////////////////////////
-/// @brief Reset the given print sheet profile to the uncalibrated state.
-///
-/// Printer use print sheet profile on the index 0 as a default so the method
-/// return always at least 1 calibrated profile.
-/// @return Return the count of the calibrated print sheet profiles.
-extern uint32_t sheet_number_of_calibrated();
-
-///////////////////////////////////////////////////////////////////////////////
-/// @brief Determine the name of the current active print sheet profile.
-///
-/// @param[out] buffer Buffer to store the print sheet profile
-/// @param[in] length Size of the given buffer.
-/// @return Number of characters written to the buffer. Number will be
-///        always less than MAX_SHEET_NAME_LENGTH
-extern uint32_t sheet_active_name(char *, uint32_t);
-
-///////////////////////////////////////////////////////////////////////////////
-/// @brief Determine the name of the given print sheet profile.
-///
-/// @param[in] index Index of the sheet profile
-/// @param[out] buffer Buffer to store the print sheet profile
-/// @param[in] length Size of the given buffer.
-/// @return Number of characters written to the buffer. Number will be
-///        always less than MAX_SHEET_NAME_LENGTH
-extern uint32_t sheet_name(uint32_t, char *, uint32_t);
-
-///////////////////////////////////////////////////////////////////////////////
-/// @brief Rename the given print sheet profile.
-///
-/// @param[in] index Index of the sheet profile
-/// @param[in] buffer New name of the print sheet profile
-/// @param[in] length Size of the given name.
-/// @return Number of characters written to the buffer. Number will be
-///        always less than MAX_SHEET_NAME_LENGTH
-extern uint32_t sheet_rename(uint32_t, char const *, uint32_t);
 
 #ifdef __cplusplus
 } // extern "C"

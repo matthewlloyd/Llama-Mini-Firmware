@@ -29,27 +29,27 @@ dependencies_dir = project_root_dir / '.dependencies'
 # yapf: disable
 dependencies = {
     'ninja': {
-        'version': '1.9.0',
+        'version': '1.10.2',
         'url': {
-            'Linux': 'https://github.com/ninja-build/ninja/releases/download/v1.9.0/ninja-linux.zip',
-            'Windows': 'https://github.com/ninja-build/ninja/releases/download/v1.9.0/ninja-win.zip',
-            'Darwin': 'https://github.com/ninja-build/ninja/releases/download/v1.9.0/ninja-mac.zip',
+            'Linux': 'https://github.com/ninja-build/ninja/releases/download/v1.10.2/ninja-linux.zip',
+            'Windows': 'https://github.com/ninja-build/ninja/releases/download/v1.10.2/ninja-win.zip',
+            'Darwin': 'https://github.com/ninja-build/ninja/releases/download/v1.10.2/ninja-mac.zip',
         },
     },
     'cmake': {
-        'version': '3.15.5',
+        'version': '3.21.3',
         'url': {
-            'Linux': 'https://github.com/Kitware/CMake/releases/download/v3.15.5/cmake-3.15.5-Linux-x86_64.tar.gz',
-            'Windows': 'https://github.com/Kitware/CMake/releases/download/v3.15.5/cmake-3.15.5-win64-x64.zip',
-            'Darwin': 'https://github.com/Kitware/CMake/releases/download/v3.15.5/cmake-3.15.5-Darwin-x86_64.tar.gz',
+            'Linux': 'https://github.com/Kitware/CMake/releases/download/v3.21.3/cmake-3.21.3-linux-x86_64.tar.gz',
+            'Windows': 'https://github.com/Kitware/CMake/releases/download/v3.21.3/cmake-3.21.3-windows-x86_64.zip',
+            'Darwin': 'https://github.com/Kitware/CMake/releases/download/v3.21.3/cmake-3.21.3-macos-universal.tar.gz',
         },
     },
     'gcc-arm-none-eabi': {
-        'version': '7.3.1',
+        'version': '10.3.1',
         'url': {
-            'Linux': 'https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu-rm/7-2018q2/gcc-arm-none-eabi-7-2018-q2-update-linux.tar.bz2',
-            'Windows': 'https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu-rm/7-2018q2/gcc-arm-none-eabi-7-2018-q2-update-win32.zip',
-            'Darwin': 'https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu-rm/7-2018q2/gcc-arm-none-eabi-7-2018-q2-update-mac.tar.bz2',
+            'Linux': 'https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-x86_64-linux.tar.bz2',
+            'Windows': 'https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-win32.zip',
+            'Darwin': 'https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-mac.tar.bz2',
         }
     },
     'clang-format': {
@@ -61,11 +61,19 @@ dependencies = {
         }
     },
     'bootloader-mini': {
-        'version': '1.1.1',
-        'url': 'https://prusa-buddy-firmware-dependencies.s3.eu-central-1.amazonaws.com/bootloader-mini-1.1.1.zip',
+        'version': '2.0.2',
+        'url': 'https://prusa-buddy-firmware-dependencies.s3.eu-central-1.amazonaws.com/bootloader-mini-v2.0.2-FF7C65BF-1853-43B3-869C-C846FA39AB75.zip',
+    },
+    'mini404': {
+        'version': '0.9.3',
+        'url': {
+            'Linux': 'https://github.com/vintagepc/MINI404/releases/download/v0.9.3/Mini404-v0.9.3-linux.tar.bz2',
+            'Windows': 'https://github.com/vintagepc/MINI404/releases/download/v0.9.3/Mini404-v0.9.3-w64.zip',
+            'Darwin': 'https://github.com/vintagepc/MINI404/releases/download/v0.9.3/Mini404-v0.9.3-macos.tar.bz2',
+        }
     },
 }
-pip_dependencies = ['ecdsa', 'polib']
+pip_dependencies = ['ecdsa', 'polib', 'littlefs-python']
 # yapf: enable
 
 
@@ -145,6 +153,15 @@ def install_dependency(dependency):
     fix_executable_permissions(dependency, installation_directory)
 
 
+def get_dependency_version(dependency):
+    return dependencies[dependency]['version']
+
+
+def get_dependency_directory(dependency) -> Path:
+    version = dependencies[dependency]['version']
+    return Path(directory_for_dependency(dependency, version))
+
+
 def main() -> int:
     parser = ArgumentParser()
     # yapf: disable
@@ -159,8 +176,7 @@ def main() -> int:
 
     if args.print_dependency_version:
         try:
-            version = dependencies[args.print_dependency_version]['version']
-            print(version)
+            print(get_dependency_version(args.print_dependency_version))
             return 0
         except KeyError:
             print('Unknown dependency "%s"' % args.print_dependency_version)
@@ -168,10 +184,7 @@ def main() -> int:
 
     if args.print_dependency_directory:
         try:
-            dependency = args.print_dependency_directory
-            version = dependencies[dependency]['version']
-            install_dir = directory_for_dependency(dependency, version)
-            print(install_dir)
+            print(get_dependency_directory(args.print_dependency_directory))
             return 0
         except KeyError:
             print('Unknown dependency "%s"' % args.print_dependency_directory)

@@ -41,6 +41,7 @@ static inline void MINDA_BROKEN_CABLE_DETECTION__POST_XYMOVE() {}
 #include "motion.h"
 #include "temperature.h"
 #include "endstops.h"
+#include "planner.h"
 
 #include "../gcode/gcode.h"
 #include "../lcd/ultralcd.h"
@@ -138,7 +139,7 @@ xyz_pos_t probe_offset; // Initialized by settings.load()
       #if ENABLED(HOST_PROMPT_SUPPORT)
         host_prompt_do(PROMPT_USER_CONTINUE, PSTR("Deploy TouchMI probe."), PSTR("Continue"));
       #endif
-      while (wait_for_user) idle();
+      while (wait_for_user) idle(true);
       ui.reset_status();
       ui.goto_screen(prev_screen);
 
@@ -302,7 +303,7 @@ FORCE_INLINE void probe_specific_action(const bool deploy) {
       #if ENABLED(EXTENSIBLE_UI)
         ExtUI::onUserConfirmRequired_P(PSTR("Stow Probe"));
       #endif
-      while (wait_for_user) idle();
+      while (wait_for_user) idle(true);
       ui.reset_status();
 
     } while(
@@ -555,6 +556,9 @@ static float run_z_probe() {
 
     // Do a first probe at the fast speed
     if (do_probe_move(z_probe_low_point, MMM_TO_MMS(Z_PROBE_SPEED_FAST))) {
+      if (planner.draining())
+        return NAN;
+
       if (DEBUGGING(LEVELING)) {
         DEBUG_ECHOLNPGM("FAST Probe fail!");
         DEBUG_POS("<<< run_z_probe", current_position);
@@ -598,6 +602,9 @@ static float run_z_probe() {
     {
       // Probe downward slowly to find the bed
       if (do_probe_move(z_probe_low_point, MMM_TO_MMS(Z_PROBE_SPEED_SLOW))) {
+        if (planner.draining())
+          return NAN;
+
         if (DEBUGGING(LEVELING)) {
           DEBUG_ECHOLNPGM("SLOW Probe fail!");
           DEBUG_POS("<<< run_z_probe", current_position);

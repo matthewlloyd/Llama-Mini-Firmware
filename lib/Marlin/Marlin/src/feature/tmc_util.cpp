@@ -972,6 +972,7 @@
     st.TCOOLTHRS(0xFFFFF);
     st.en_pwm_mode(false);
     st.diag1_stall(true);
+    st.sfilt(false);
 
     return stealthchop_was_enabled;
   }

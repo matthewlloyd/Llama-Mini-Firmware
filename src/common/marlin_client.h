@@ -2,6 +2,7 @@
 #pragma once
 
 #include <stdbool.h>
+
 #include "marlin_events.h"
 #include "marlin_vars.h"
 #include "marlin_errors.h"
@@ -41,11 +42,7 @@ extern int marlin_client_id(void);
 extern void marlin_client_wait_for_start_processing(void);
 
 //sets dialog callback, returns 1 on success
-extern int marlin_client_set_fsm_create_cb(fsm_create_t cb);
-//sets dialog callback, returns 1 on success
-extern int marlin_client_set_fsm_destroy_cb(fsm_destroy_t cb);
-//sets dialog callback, returns 1 on success
-extern int marlin_client_set_fsm_change_cb(fsm_change_t cb);
+extern int marlin_client_set_fsm_cb(fsm_cb_t cb);
 //sets dialog message, returns 1 on success
 extern int marlin_client_set_message_cb(message_cb_t cb);
 //sets dialog message, returns 1 on success
@@ -130,8 +127,25 @@ extern uint64_t marlin_errors(void);
 // returns variable value from client structure by var_id
 extern variant8_t marlin_get_var(uint8_t var_id);
 
+extern float marlin_get_flt(uint8_t var_id);
+extern uint32_t marlin_get_ui32(uint8_t var_id);
+extern int32_t marlin_get_i32(uint8_t var_id);
+extern uint16_t marlin_get_ui16(uint8_t var_id);
+extern uint8_t marlin_get_ui8(uint8_t var_id);
+extern int8_t marlin_get_i8(uint8_t var_id);
+extern bool marlin_get_bool(uint8_t var_id);
+
 // request server to set variable, returns previous value or error (notimpl., TODO)
 extern variant8_t marlin_set_var(uint8_t var_id, variant8_t val);
+
+extern void marlin_set_i8(uint8_t var_id, int8_t i8);
+extern void marlin_set_bool(uint8_t var_id, bool b);
+extern void marlin_set_ui8(uint8_t var_id, uint8_t ui8);
+extern void marlin_set_i16(uint8_t var_id, int16_t i16);
+extern void marlin_set_ui16(uint8_t var_id, uint16_t ui16);
+extern void marlin_set_i32(uint8_t var_id, int32_t i32);
+extern void marlin_set_ui32(uint8_t var_id, uint32_t ui32);
+extern void marlin_set_flt(uint8_t var_id, float flt);
 
 // returns variable structure pointer for calling thread
 extern marlin_vars_t *marlin_vars(void);
@@ -155,14 +169,15 @@ extern uint8_t marlin_get_pqueue_max(void);
 extern float marlin_set_target_nozzle(float val);
 extern float marlin_set_display_nozzle(float val);
 extern float marlin_set_target_bed(float val);
-extern float marlin_set_z_offset(float val);
 extern uint8_t marlin_set_fan_speed(uint8_t val);
 extern uint16_t marlin_set_print_speed(uint16_t val);
 extern uint16_t marlin_set_flow_factor(uint16_t val);
-extern uint8_t marlin_set_wait_heat(uint8_t val);
-extern uint8_t marlin_set_wait_user(uint8_t val);
+extern bool marlin_set_wait_heat(bool val);
+extern bool marlin_set_wait_user(bool val);
 
 extern void marlin_do_babysteps_Z(float offs);
+
+extern void marlin_move_axis(float pos, float feedrate, uint8_t axis);
 
 extern void marlin_settings_save(void);
 
@@ -174,11 +189,13 @@ extern void marlin_manage_heater(void);
 
 extern void marlin_quick_stop(void);
 
-extern void marlin_test_start(uint32_t mask);
+extern void marlin_test_start(uint64_t mask);
 
 extern void marlin_test_abort(void);
 
 extern void marlin_print_start(const char *filename);
+
+extern void marlin_set_current_file(const char *filename);
 
 extern void marlin_print_abort(void);
 
@@ -188,9 +205,14 @@ extern void marlin_print_resume(void);
 
 extern void marlin_park_head(void);
 
+extern void marlin_clear_qcode_queue(void);
+
 extern void marlin_notify_server_about_encoder_move(void);
 
 extern void marlin_notify_server_about_knob_click(void);
+
+//returns 1 if printer is printing, else 0;
+extern bool marlin_is_printing();
 
 // returns 1 if reheating is in progress, otherwise 0
 extern int marlin_reheating(void);

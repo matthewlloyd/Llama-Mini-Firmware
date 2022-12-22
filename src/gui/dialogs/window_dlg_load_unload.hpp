@@ -1,15 +1,19 @@
-// window_dlg_load_unload.hpp
+/**
+ * @file window_dlg_load_unload.hpp
+ * @author Radek Vana
+ * @brief functions to call preheat / load / unload / purge / change in GUI
+ * @date 2021-01-24
+ */
 
 #pragma once
-#include "dlg_result.hpp"
-#include "i18n.h"
+#include "client_fsm_types.h"
+#include "preheat_multithread_status.hpp"
 
-dlg_result_t gui_dlg_load(string_view_utf8 caption);
+namespace PreheatStatus {
 
-dlg_result_t gui_dlg_purge(string_view_utf8 caption);
+Result DialogBlockingPreheat(RetAndCool_t retAndCool);
+Result DialogBlockingLoad(RetAndCool_t retAndCool);
+Result DialogBlockingUnLoad(RetAndCool_t retAndCool);
+Result DialogBlockingChangeLoad(RetAndCool_t retAndCool);
 
-dlg_result_t gui_dlg_load_forced(void); //no return option
-
-dlg_result_t gui_dlg_unload(string_view_utf8 caption);
-
-dlg_result_t gui_dlg_unload_forced(void); //no return option + no skipping preheat
+}

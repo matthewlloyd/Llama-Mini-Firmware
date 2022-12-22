@@ -1,15 +1,11 @@
 // trinamic.cpp
 #include "trinamic.h"
-#include "dbg.h"
 #include "config.h"
 #include "TMCStepper.h"
 #include "gpio.h"
 #include "hwio_pindef.h"
 #include "../Marlin/src/module/stepper.h"
 #include "bsod.h"
-
-#define DBG _dbg3 //debug level 3
-//#define DBG(...)  //disable debug
 
 #if ((MOTHERBOARD == 1823))
 
@@ -23,7 +19,7 @@ static uint8_t tmc_sg_axis = 0; // current axis for stalguard result sampling (0
 static tmc_sg_sample_cb_t *tmc_sg_sample_cb = NULL; // sg sample callback
 
 osMutexDef(tmc_mutex);
-osMutexId(tmc_mutex_id);
+osMutexId tmc_mutex_id;
 
 extern "C" {
 
@@ -122,82 +118,6 @@ uint8_t tmc_sample(void) {
 
 extern uint16_t tmc_get_last_sg_sample(uint8_t axis) {
     return tmc_sg[axis];
-}
-
-void tmc_set_sgthrs(uint16_t SGT) {
-    pStep[0]->SGTHRS(SGT);
-    pStep[1]->SGTHRS(SGT);
-    pStep[2]->SGTHRS(SGT);
-    pStep[3]->SGTHRS(SGT);
-}
-void tmc_set_mres() {
-    pStep[0]->mres(4);
-    pStep[1]->mres(4);
-    pStep[2]->mres(4);
-    pStep[3]->mres(4);
-}
-uint8_t tmc_get_diag() //0 = X, 2 = Y, 4 = Z, 8 = E
-{
-    unsigned int diag = 0;
-    uint16_t tmp_step;
-    uint16_t step = 3500;
-    uint8_t step_mask = 15;
-
-    uint32_t gconf = pStep[3]->GCONF();
-    gconf &= ~4;
-    pStep[3]->GCONF(gconf);
-    diag = 0;
-
-    for (tmp_step = 0; tmp_step < step; step--) {
-        if (step_mask & 1)
-            xStep.write(Pin::State::low);
-        if (step_mask & 2)
-            yStep.write(Pin::State::low);
-        if (step_mask & 4)
-            zStep.write(Pin::State::low);
-        if (step_mask & 8)
-            e0Step.write(Pin::State::low);
-        tmc_delay(10);
-        xStep.write(Pin::State::high);
-        yStep.write(Pin::State::high);
-        zStep.write(Pin::State::high);
-        e0Step.write(Pin::State::high);
-        diag |= static_cast<unsigned int>(e0Diag.read()) << 3;
-        diag |= static_cast<unsigned int>(xDiag.read());
-        diag |= static_cast<unsigned int>(yDiag.read()) << 1;
-        diag |= static_cast<unsigned int>(zDiag.read()) << 2;
-
-        if (diag == 15)
-            break;
-    }
-    return diag;
-}
-
-static void tmc_move(uint8_t step_mask, uint16_t step, uint8_t speed) {
-    uint16_t tmp_step;
-    for (tmp_step = 0; tmp_step < step; step--) {
-        if (step_mask & 1)
-            xStep.write(Pin::State::high);
-        if (step_mask & 2)
-            yStep.write(Pin::State::high);
-        if (step_mask & 4)
-            zStep.write(Pin::State::high);
-        if (step_mask & 8)
-            e0Step.write(Pin::State::high);
-        tmc_delay(1024 * speed);
-        xStep.write(Pin::State::low);
-        yStep.write(Pin::State::low);
-        zStep.write(Pin::State::low);
-        e0Step.write(Pin::State::low);
-    }
-}
-
-void tmc_set_move(uint8_t tmc, uint32_t step, uint8_t dir, uint8_t speed) {
-    xDir.write(static_cast<Pin::State>(dir));
-    yDir.write(static_cast<Pin::State>(dir));
-    zDir.write(static_cast<Pin::State>(dir));
-    e0Dir.write(static_cast<Pin::State>(dir));
-    tmc_move(tmc, step, speed);
 }
 
 } //extern "C"

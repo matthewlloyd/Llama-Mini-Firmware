@@ -1,13 +1,13 @@
 // dump.c
 
-#include "dump.h"
 #include <string.h>
-#include "ff.h"
+#include "dump.h"
+#include <stdio.h>
 #include "w25x.h"
 
 static const uint32_t DUMP_OFFSET = 0x00;
-static const uint32_t DUMP_PAGE_SIZE = 0x100;
-static const uint32_t DUMP_BUFF_SIZE = 0x100;
+static const uint16_t DUMP_PAGE_SIZE = 0x100;
+static const uint16_t DUMP_BUFF_SIZE = 0x100;
 
 static const uint32_t DUMP_XFLASH_SIZE = DUMP_RAM_SIZE + DUMP_CCRAM_SIZE;
 
@@ -20,8 +20,11 @@ static inline void dump_regs_SCB(void) {
 }
 
 void dump_to_xflash(void) {
+    if (!w25x_init(false)) {
+        return;
+    }
+
     _Static_assert(sizeof(dumpinfo_t) == 16, "invalid sizeof(dumpinfo_t)");
-    uint32_t addr;
     if (!dump_in_xflash_is_empty()) {
         if (dump_in_xflash_is_saved()) {
             if (!dump_in_xflash_is_displayed()) {
@@ -30,24 +33,14 @@ void dump_to_xflash(void) {
         }
     }
     dump_regs_SCB();
-    if (w25x_init()) {
-        for (addr = 0; addr < DUMP_XFLASH_SIZE; addr += 0x10000) {
-            w25x_wait_busy();
-            w25x_enable_wr();
-            w25x_block64_erase(DUMP_OFFSET + addr);
-        }
-        for (addr = 0; addr < DUMP_RAM_SIZE; addr += DUMP_PAGE_SIZE) {
-            w25x_wait_busy();
-            w25x_enable_wr();
-            w25x_page_program(DUMP_OFFSET + addr, (uint8_t *)(DUMP_RAM_ADDR + addr), DUMP_PAGE_SIZE);
-        }
-        for (addr = 0; addr < DUMP_CCRAM_SIZE; addr += DUMP_PAGE_SIZE) {
-            w25x_wait_busy();
-            w25x_enable_wr();
-            w25x_page_program(DUMP_OFFSET + DUMP_RAM_SIZE + addr, (uint8_t *)(DUMP_CCRAM_ADDR + addr), DUMP_PAGE_SIZE);
-        }
-        w25x_wait_busy();
-        w25x_disable_wr();
+    for (uint32_t addr = 0; addr < DUMP_XFLASH_SIZE; addr += 0x10000) {
+        w25x_block64_erase(DUMP_OFFSET + addr);
+    }
+    for (uint32_t addr = 0; addr < DUMP_RAM_SIZE; addr += DUMP_PAGE_SIZE) {
+        w25x_page_program(DUMP_OFFSET + addr, (uint8_t *)(DUMP_RAM_ADDR + addr), DUMP_PAGE_SIZE);
+    }
+    for (uint32_t addr = 0; addr < DUMP_CCRAM_SIZE; addr += DUMP_PAGE_SIZE) {
+        w25x_page_program(DUMP_OFFSET + DUMP_RAM_SIZE + addr, (uint8_t *)(DUMP_CCRAM_ADDR + addr), DUMP_PAGE_SIZE);
     }
 }
 
@@ -93,11 +86,7 @@ void dump_in_xflash_clear_flag(uint8_t flag) {
     w25x_rd_data(DUMP_OFFSET + DUMP_RAM_SIZE + DUMP_CCRAM_SIZE - DUMP_INFO_SIZE, &dumpinfo_type, 1);
     if (dumpinfo_type & flag) {
         dumpinfo_type &= ~flag;
-        w25x_wait_busy();
-        w25x_enable_wr();
         w25x_page_program(DUMP_OFFSET + DUMP_RAM_SIZE + DUMP_CCRAM_SIZE - DUMP_INFO_SIZE, (uint8_t *)(&dumpinfo_type), 1);
-        w25x_wait_busy();
-        w25x_disable_wr();
     }
 }
 
@@ -134,63 +123,57 @@ unsigned int dump_in_xflash_read_regs_GEN(void *pRegsGEN, unsigned int size) {
 }
 
 void dump_in_xflash_reset(void) {
-    if (w25x_init()) {
-        for (uint32_t addr = 0; addr < DUMP_XFLASH_SIZE; addr += 0x10000) {
-            w25x_wait_busy();
-            w25x_enable_wr();
-            w25x_block64_erase(DUMP_OFFSET + addr);
-        }
-        w25x_wait_busy();
-        w25x_disable_wr();
+    for (uint32_t addr = 0; addr < DUMP_XFLASH_SIZE; addr += 0x10000) {
+        w25x_block64_erase(DUMP_OFFSET + addr);
     }
 }
 
 void dump_in_xflash_delete(void) {
-    if (w25x_init()) {
-        for (uint32_t addr = 0; addr < 0x800000; addr += 0x10000) {
-            w25x_wait_busy();
-            w25x_enable_wr();
-            w25x_block64_erase(DUMP_OFFSET + addr);
-        }
-        w25x_wait_busy();
-        w25x_disable_wr();
+    for (uint32_t addr = 0; addr < 0x800000; addr += 0x10000) {
+        w25x_block64_erase(DUMP_OFFSET + addr);
     }
 }
 
 int dump_save_to_usb(const char *fn) {
-    FIL fil;
+    FILE *fd;
     uint32_t addr;
     uint8_t buff[DUMP_BUFF_SIZE];
-    UINT bw;
-    UINT bw_total = 0;
-    if (w25x_init()) {
-        if (f_open(&fil, fn, FA_WRITE | FA_CREATE_ALWAYS) == FR_OK) {
-            //save dumped RAM and CCRAM from xflash
-            for (addr = 0; addr < DUMP_XFLASH_SIZE; addr += DUMP_BUFF_SIZE) {
-                memset(buff, 0, DUMP_BUFF_SIZE);
-                w25x_rd_data(addr, buff, DUMP_BUFF_SIZE);
-                if (f_write(&fil, buff, DUMP_BUFF_SIZE, &bw) != FR_OK)
-                    break;
-                bw_total += bw;
+    int bw;
+    int bw_total = 0;
+    fd = fopen(fn, "w");
+    if (fd != NULL) {
+        //save dumped RAM and CCRAM from xflash
+        for (addr = 0; addr < DUMP_XFLASH_SIZE; addr += DUMP_BUFF_SIZE) {
+            memset(buff, 0, DUMP_BUFF_SIZE);
+            w25x_rd_data(addr, buff, DUMP_BUFF_SIZE);
+            bw = fwrite(buff, 1, DUMP_BUFF_SIZE, fd);
+            if (bw <= 0) {
+                break;
             }
-            //save OTP
-            for (addr = 0; addr < DUMP_OTP_SIZE; addr += DUMP_BUFF_SIZE) {
-                if (f_write(&fil, (uint8_t *)(DUMP_OTP_ADDR + addr), DUMP_BUFF_SIZE, &bw) != FR_OK)
-                    break;
-                bw_total += bw;
-            }
-            //save FLASH
-            for (addr = 0; addr < DUMP_FLASH_SIZE; addr += DUMP_BUFF_SIZE) {
-                if (f_write(&fil, (uint8_t *)(DUMP_FLASH_ADDR + addr), DUMP_BUFF_SIZE, &bw) != FR_OK)
-                    break;
-                bw_total += bw;
-            }
-            f_close(&fil);
-            if (bw_total != (DUMP_XFLASH_SIZE + DUMP_OTP_SIZE + DUMP_FLASH_SIZE))
-                return 0;
-            dump_in_xflash_set_saved();
-            return 1;
+            bw_total += bw;
         }
+        //save OTP
+        for (addr = 0; addr < DUMP_OTP_SIZE; addr += DUMP_BUFF_SIZE) {
+            bw = fwrite((void *)(DUMP_OTP_ADDR + addr), 1, DUMP_BUFF_SIZE, fd);
+            if (bw <= 0) {
+                break;
+            }
+            bw_total += bw;
+        }
+        //save FLASH
+        for (addr = 0; addr < DUMP_FLASH_SIZE; addr += DUMP_BUFF_SIZE) {
+            bw = fwrite((void *)(DUMP_FLASH_ADDR + addr), 1, DUMP_BUFF_SIZE, fd);
+            if (bw <= 0) {
+                break;
+            }
+            bw_total += bw;
+        }
+        fclose(fd);
+        if (bw_total != (DUMP_XFLASH_SIZE + DUMP_OTP_SIZE + DUMP_FLASH_SIZE)) {
+            return 0;
+        }
+        dump_in_xflash_set_saved();
+        return 1;
     }
     return 0;
 }

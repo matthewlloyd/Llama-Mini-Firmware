@@ -8,6 +8,10 @@
 #include "screen_printing.hpp"
 #include "ScreenFirstLayer.hpp"
 
+#if HAS_SELFTEST
+    #include "ScreenSelftest.hpp"
+#endif
+
 static void OpenPrintScreen(ClientFSM dialog) {
     switch (dialog) {
     case ClientFSM::Serial_printing:
@@ -28,9 +32,13 @@ static void OpenPrintScreen(ClientFSM dialog) {
 
 //*****************************************************************************
 //method definitions
-void DialogHandler::open(ClientFSM dialog, uint8_t data) {
+void DialogHandler::open(fsm::create_t o) {
     if (ptr)
         return; //the dialog is already openned
+
+    const ClientFSM dialog = o.type.GetType();
+
+    ++opened_times[size_t(dialog)];
 
     //todo get_scr_printing_serial() is no dialog but screen ... change to dialog?
     // only ptr = dialog_creators[dialog](data); should remain
@@ -45,12 +53,25 @@ void DialogHandler::open(ClientFSM dialog, uint8_t data) {
             IScreenPrinting::NotifyMarlinStart();
         }
         break;
+    case ClientFSM::Selftest:
+#if HAS_SELFTEST
+        if (!ScreenSelftest::GetInstance()) {
+            //data contain screen caption type
+            //ScreenSelftest::SetHeaderMode(...);
+            Screens::Access()->Open(ScreenFactory::Screen<ScreenSelftest>);
+        }
+#endif // HAS_SELFTEST
+        break;
     default:
-        ptr = dialog_ctors[size_t(dialog)](data);
+        ptr = dialog_ctors[size_t(dialog)](o.data);
     }
 }
 
-void DialogHandler::close(ClientFSM dialog) {
+void DialogHandler::close(fsm::destroy_t o) {
+    const ClientFSM dialog = o.type.GetType();
+
+    ++closed_times[size_t(dialog)];
+
     if (waiting_closed == dialog) {
         waiting_closed = ClientFSM::_none;
     } else {
@@ -61,6 +82,7 @@ void DialogHandler::close(ClientFSM dialog) {
             Screens::Access()->CloseAll();
             break;
         case ClientFSM::FirstLayer:
+        case ClientFSM::Selftest:
             Screens::Access()->Close();
             break;
         case ClientFSM::Printing: //closed on button, todo marlin thread should close it
@@ -73,18 +95,26 @@ void DialogHandler::close(ClientFSM dialog) {
     ptr = nullptr; //destroy current dialog
 }
 
-void DialogHandler::change(ClientFSM /*dialog*/, uint8_t phase, uint8_t progress_tot, uint8_t progress) {
-    if (ptr)
-        ptr->Change(phase, progress_tot, progress);
+void DialogHandler::change(fsm::change_t o) {
+    const ClientFSM dialogType = o.type.GetType();
+
+    switch (dialogType) {
+    case ClientFSM::Selftest:
+#if HAS_SELFTEST
+        if (ScreenSelftest::GetInstance()) {
+            ScreenSelftest::GetInstance()->Change(o.data);
+        }
+#endif // HAS_SELFTEST
+        break;
+    default:
+        if (ptr)
+            ptr->Change(o.data);
+    }
 }
 
-void DialogHandler::wait_until_closed(ClientFSM dialog, uint8_t data) {
-    open(dialog, data);
-    waiting_closed = dialog;
-    while (waiting_closed == dialog)
-        gui_loop();
+bool DialogHandler::IsOpen() const {
+    return ptr != nullptr;
 }
-
 //*****************************************************************************
 //Meyers singleton
 DialogHandler &DialogHandler::Access() {
@@ -92,15 +122,58 @@ DialogHandler &DialogHandler::Access() {
     return ret;
 }
 
-void DialogHandler::Open(ClientFSM dialog, uint8_t data) {
-    Access().open(dialog, data);
+void DialogHandler::Command(uint32_t u32, uint16_t u16) {
+    fsm::variant_t variant(u32, u16);
+
+    // not sure about buffering ClientFSM_Command::change, it could work without it
+    // but it is buffered too to be simpler
+    Access().command_queue.Push(variant);
 }
-void DialogHandler::Close(ClientFSM dialog) {
-    Access().close(dialog);
+
+void DialogHandler::command(fsm::variant_t variant) {
+    switch (variant.GetCommand()) {
+    case ClientFSM_Command::create:
+        open(variant.create);
+        break;
+    case ClientFSM_Command::destroy:
+        close(variant.destroy);
+        break;
+    case ClientFSM_Command::change:
+        change(variant.change);
+        break;
+    default:
+        break;
+    }
 }
-void DialogHandler::Change(ClientFSM dialog, uint8_t phase, uint8_t progress_tot, uint8_t progress) {
-    Access().change(dialog, phase, progress_tot, progress);
-}
+
 void DialogHandler::WaitUntilClosed(ClientFSM dialog, uint8_t data) {
-    Access().wait_until_closed(dialog, data);
+    PreOpen(dialog, data);
+    waiting_closed = dialog;
+    while (waiting_closed == dialog) {
+        gui::TickLoop();
+        Loop();
+        gui_loop();
+    }
+}
+
+void DialogHandler::PreOpen(ClientFSM dialog, uint8_t data) {
+    const fsm::variant_t var(fsm::create_t(dialog, data));
+    Command(var.u32, var.u16);
+}
+
+redraw_cmd_t DialogHandler::Loop() {
+    fsm::variant_t variant = command_queue.Front();
+    // execute 1 command (don't use "while") because
+    // screen open only pushes factory method on top of the stack - in this case we would loose folowing change !!!
+    // queue merges states, longest possible sequence for not nested fsm is destroy -> craate -> change
+    if (variant.GetCommand() == ClientFSM_Command::none)
+        return redraw_cmd_t::none;
+
+    command(variant);
+    command_queue.Pop(); //erase item from queue
+
+    variant = command_queue.Front();
+    if (variant.GetCommand() == ClientFSM_Command::none)
+        return redraw_cmd_t::redraw;
+    return redraw_cmd_t::skip;
 }

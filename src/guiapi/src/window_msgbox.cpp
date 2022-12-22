@@ -4,36 +4,22 @@
 #include "sound.hpp"
 #include <algorithm>
 #include "ScreenHandler.hpp"
-#include "dialog_response.hpp"
+#include "client_response_texts.hpp"
 #include "GuiDefaults.hpp"
 
 /*****************************************************************************/
-// clang-format off
-const PhaseResponses Responses_NONE             = { Response::_none, Response::_none,  Response::_none,  Response::_none };
-const PhaseResponses Responses_Next             = { Response::Next,  Response::_none,  Response::_none,  Response::_none };
-const PhaseResponses Responses_Ok               = { Response::Ok,    Response::_none,  Response::_none,  Response::_none };
-const PhaseResponses Responses_OkCancel         = { Response::Ok,    Response::Cancel, Response::_none,  Response::_none };
-const PhaseResponses Responses_AbortRetryIgnore = { Response::Abort, Response::Retry,  Response::Ignore, Response::_none };
-const PhaseResponses Responses_YesNo            = { Response::Yes,   Response::No,     Response::_none,  Response::_none };
-const PhaseResponses Responses_YesNoCancel      = { Response::Yes,   Response::No,     Response::Cancel, Response::_none };
-const PhaseResponses Responses_RetryCancel      = { Response::Retry, Response::Cancel, Response::_none,  Response::_none };
-// clang-format on
-/*****************************************************************************/
-
-/*****************************************************************************/
 //MsgBoxBase
-MsgBoxBase::MsgBoxBase(Rect16 rect, const PhaseResponses *resp, size_t def_btn, const PhaseTexts *labels, string_view_utf8 txt, is_multiline multiline)
+MsgBoxBase::MsgBoxBase(Rect16 rect, const PhaseResponses &resp, size_t def_btn, const PhaseTexts *labels, string_view_utf8 txt, is_multiline multiline)
     : AddSuperWindow<IDialog>(rect)
     , text(this, getTextRect(), multiline, is_closed_on_click_t::no, txt)
-    , buttons(this, get_radio_button_rect(rect), resp, labels)
+    , buttons(this, GuiDefaults::GetButtonRect(rect), resp, labels)
     , result(Response::_none) {
     buttons.SetBtnIndex(def_btn);
-    //text.SetAlignment(ALIGN_CENTER);
     //buttons.SetCapture(); //todo make this work
 }
 
 Rect16 MsgBoxBase::getTextRect() {
-    return rect - get_radio_button_rect(rect).Height();
+    return GetRect() - GuiDefaults::GetButtonRect(GetRect()).Height();
 }
 
 Response MsgBoxBase::GetResult() {
@@ -49,11 +35,9 @@ void MsgBoxBase::windowEvent(EventLock /*has private ctor*/, window_t *sender, G
         break;
     case GUI_event_t::ENC_UP:
         ++buttons;
-        gui_invalidate();
         break;
     case GUI_event_t::ENC_DN:
         --buttons;
-        gui_invalidate();
         break;
     default:
         SuperWindowEvent(sender, event, param);
@@ -62,39 +46,52 @@ void MsgBoxBase::windowEvent(EventLock /*has private ctor*/, window_t *sender, G
 
 /*****************************************************************************/
 //MsgBoxTitled
-MsgBoxTitled::MsgBoxTitled(Rect16 rect, const PhaseResponses *resp, size_t def_btn, const PhaseTexts *labels,
+MsgBoxTitled::MsgBoxTitled(Rect16 rect, const PhaseResponses &resp, size_t def_btn, const PhaseTexts *labels,
     string_view_utf8 txt, is_multiline multiline, string_view_utf8 tit, uint16_t title_icon_id_res)
-    : AddSuperWindow<MsgBoxBase>(rect, resp, def_btn, labels, txt, multiline)
-    , title_icon(this, title_icon_id_res, { rect.Left(), rect.Top() }, GuiDefaults::Padding)
-    , title(this, getTitleRect(), is_multiline::no, is_closed_on_click_t::no, tit) {
-    text.rect = getTitledTextRect(); // reinit text, icon and title must be initialized
+    : AddSuperWindow<MsgBoxIconned>(rect, resp, def_btn, labels, txt, multiline, title_icon_id_res)
+    , title(this, Rect16(), is_multiline::no, is_closed_on_click_t::no, tit) {
+    // set title params for height extraction
     title.font = getTitleFont();
-    title.SetPadding({ 0, 0, 0, 0 });
+    title.SetPadding(GuiDefaults::Padding);
+    // align icon to the left
+    icon.SetRect(getIconRect());
+    // set positions of the rest
+    title.SetRect(getTitleRect());
+    text.SetRect(getTextRect()); // reinit text, icon and title must be initialized
 }
 
 Rect16 MsgBoxTitled::getTitleRect() {
     Rect16 title_rect;
-    if (!title_icon.rect.IsEmpty()) {
-        title_rect = title_icon.rect;                          // Y, H is valid
-        title_rect += Rect16::Left_t(title_icon.rect.Width()); // fix X
+    if (!icon.GetRect().IsEmpty()) {
+        title_rect = icon.GetRect();                // Y, H is valid
+        title_rect += Rect16::Left_t(icon.Width()); // fix X
     } else {
-        title_rect = rect;                                // X, Y is valid
+        title_rect = GetRect();                           // X, Y is valid
         title_rect = Rect16::Height_t(getTitleFont()->h); // fix H
     }
     //now just need to calculate W
-    title_rect = Rect16::Width_t(rect.Left() + rect.Width() - title_rect.Left());
+    title_rect = Rect16::Width_t(Left() + Width() - title_rect.Left());
     return title_rect;
 }
 
-Rect16 MsgBoxTitled::getTitledTextRect() {
-    Rect16 text_rect = rect;
-    text_rect -= getTitleRect().Height();
-    text_rect -= Rect16::Height_t(4); // atleast 1px red line and 1px space after red line
-    text_rect -= get_radio_button_rect(rect).Height();
+Rect16 MsgBoxTitled::getLineRect() {
+    return Rect16(GetRect().Left() + title.padding.left, GetRect().Top() + getTitleRect().Height(),
+        GetRect().Width() - (title.padding.left + title.padding.right), 1);
+}
 
-    text_rect += Rect16::Top_t(getTitleRect().Height());
-    text_rect += Rect16::Top_t(4); // atleast 1px red line and 1px space after red line
+Rect16 MsgBoxTitled::getTextRect() {
+    Rect16 text_rect = GetRect();
+    uint16_t x = getLineRect().TopEndPoint().y + GuiDefaults::Padding.top;
+
+    text_rect -= Rect16::Height_t(x - text_rect.Top());
+    text_rect -= GuiDefaults::GetButtonRect(GetRect()).Height();
+
+    text_rect = Rect16::Top_t(x);
     return text_rect;
+}
+
+Rect16 MsgBoxTitled::getIconRect() {
+    return Rect16(GetRect().Left(), GetRect().Top(), GuiDefaults::FooterIconSize.w, std::max((int)GuiDefaults::FooterIconSize.h, title.font->h + title.padding.top + title.padding.bottom));
 }
 
 font_t *MsgBoxTitled::getTitleFont() {
@@ -103,31 +100,32 @@ font_t *MsgBoxTitled::getTitleFont() {
 
 void MsgBoxTitled::unconditionalDraw() {
     MsgBoxBase::unconditionalDraw();
-    Rect16 rc = getTitledTextRect();
-
-    display::DrawLine(point_ui16(rc.Left() + title.padding.left, rc.Top() - 1),
-        point_ui16(rc.Width() - 2 * (title.padding.left + title.padding.right), rc.Top() - 1),
-        COLOR_RED_ALERT);
+    Rect16 line = getLineRect();
+    display::DrawLine(line.TopLeft(), line.BottomRight(), COLOR_RED_ALERT);
 }
 
 /*****************************************************************************/
 //MsgBoxIconned
-MsgBoxIconned::MsgBoxIconned(Rect16 rect, const PhaseResponses *resp, size_t def_btn, const PhaseTexts *labels,
+MsgBoxIconned::MsgBoxIconned(Rect16 rect, const PhaseResponses &resp, size_t def_btn, const PhaseTexts *labels,
     string_view_utf8 txt, is_multiline multiline, uint16_t icon_id_res)
     : AddSuperWindow<MsgBoxBase>(rect, resp, def_btn, labels, txt, multiline)
     , icon(this, icon_id_res, { int16_t(rect.Left()), int16_t(rect.Top()) }, GuiDefaults::Padding) {
-    text.rect = getIconnedTextRect(); // reinit text, icon and title must be initialized
-    icon.rect -= Rect16::Width_t(GuiDefaults::Padding.left + GuiDefaults::Padding.right);
-    icon.rect += Rect16::Left_t((rect.Width() / 2) - (icon.rect.Width() / 2)); // center icon
+    text.SetRect(getTextRect()); // reinit text, icon and title must be initialized
+    icon -= Rect16::Width_t(GuiDefaults::Padding.left + GuiDefaults::Padding.right);
+    icon += Rect16::Left_t((Width() / 2) - (icon.Width() / 2)); // center icon
 }
 
-Rect16 MsgBoxIconned::getIconnedTextRect() {
-    Rect16 text_rect = rect;
-    text_rect -= icon.rect.Height();
-    text_rect -= get_radio_button_rect(rect).Height();
+Rect16 MsgBoxIconned::getTextRect() {
+    Rect16 text_rect = GetRect();
+    text_rect -= icon.Height();
+    text_rect -= GuiDefaults::GetButtonRect(GetRect()).Height();
 
-    text_rect += Rect16::Top_t(icon.rect.Height());
+    text_rect += Rect16::Top_t(icon.Height());
     return text_rect;
+}
+
+Rect16 MsgBoxIconned::getIconRect() {
+    return Rect16(GuiDefaults::MsgBoxLayoutRect.Left(), GuiDefaults::MsgBoxLayoutRect.Top(), 0, 0);
 }
 
 /*****************************************************************************/
@@ -135,9 +133,9 @@ Rect16 MsgBoxIconned::getIconnedTextRect() {
 //to be used as blocking functions
 template <class T, typename... Args>
 Response MsgBox_Custom(Rect16 rect, const PhaseResponses &resp, size_t def_btn, string_view_utf8 txt, is_multiline multiline, Args... args) {
-    const PhaseTexts labels = { BtnTexts::Get(resp[0]), BtnTexts::Get(resp[1]), BtnTexts::Get(resp[2]), BtnTexts::Get(resp[3]) };
+    const PhaseTexts labels = { BtnResponse::GetText(resp[0]), BtnResponse::GetText(resp[1]), BtnResponse::GetText(resp[2]), BtnResponse::GetText(resp[3]) };
     //static_assert(labels.size() == 4, "Incorrect array size, modify number of elements");
-    T msgbox(rect, &resp, def_btn, &labels, txt, multiline, args...);
+    T msgbox(rect, resp, def_btn, &labels, txt, multiline, args...);
     msgbox.MakeBlocking();
     return msgbox.GetResult();
 }

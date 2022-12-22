@@ -1,9 +1,16 @@
 // sys.cpp - system functions
+#include <stdlib.h>
 #include "sys.h"
 #include "shared_config.h"
 #include "stm32f4xx_hal.h"
 #include "st25dv64k.h"
-#include "dbg.h"
+#include "log.h"
+#include "disable_interrupts.h"
+
+#define DFU_REQUEST_RTC_BKP_REGISTER RTC->BKP0R
+
+// magic value of RTC->BKP0R for requesting DFU bootloader entry
+static const constexpr uint32_t DFU_REQUESTED_MAGIC_VALUE = 0xF1E2D3C5;
 
 //firmware update flag
 static const constexpr uint16_t FW_UPDATE_FLAG_ADDRESS = 0x040B;
@@ -23,8 +30,7 @@ void sys_reset(void) {
     static_assert(sizeof(data_exchange_t) == 16, "invalid sizeof(data_exchange_t)");
 
     uint32_t aircr = SCB->AIRCR & 0x0000ffff; //read AIRCR, mask VECTKEY
-    if (__get_PRIMASK() & 1)
-        __disable_irq(); //disable irq if enabled
+    __disable_irq();
     aircr |= 0x05fa0000; //set VECTKEY
     aircr |= 0x00000004; //set SYSRESETREQ
     SCB->AIRCR = aircr;  //write AIRCR
@@ -32,7 +38,35 @@ void sys_reset(void) {
         ; //endless loop
 }
 
-void sys_dfu_boot(void) {
+void sys_dfu_request_and_reset(void) {
+    DFU_REQUEST_RTC_BKP_REGISTER = DFU_REQUESTED_MAGIC_VALUE;
+    NVIC_SystemReset();
+}
+
+bool sys_dfu_requested(void) {
+    return DFU_REQUEST_RTC_BKP_REGISTER == DFU_REQUESTED_MAGIC_VALUE;
+}
+
+void sys_dfu_boot_enter(void) {
+    // clear the flag
+    DFU_REQUEST_RTC_BKP_REGISTER = 0;
+
+    // disable systick
+    SysTick->CTRL = 0;
+    SysTick->LOAD = 0;
+    SysTick->VAL = 0;
+
+    // remap memory
+    SYSCFG->MEMRMP = 0x01;
+
+    // enter the bootloader
+    volatile uintptr_t system_addr_start = 0x1FFF0000;
+    auto system_bootloader_start = (void (*)(void))(*(uint32_t *)(system_addr_start + 4));
+    __set_MSP(*(uint32_t *)system_addr_start); // prepare stack pointer
+    system_bootloader_start();                 // jump into the bootloader
+
+    // we should never reach this
+    abort();
 }
 
 int sys_calc_flash_latency(int freq) {
@@ -59,7 +93,6 @@ int sys_pll_is_enabled(void) {
 }
 
 void sys_pll_disable(void) {
-    int irq = __get_PRIMASK() & 1;
     RCC_OscInitTypeDef RCC_OscInitStruct = { 0 };
     RCC_ClkInitTypeDef RCC_ClkInitStruct = { 0 };
     uint32_t FLatency;
@@ -69,18 +102,13 @@ void sys_pll_disable(void) {
         return;                                            //already disabled - exit
     RCC_OscInitStruct.PLL.PLLState = RCC_PLL_OFF;          //set PLL off
     RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSE; //set CLK source HSE
-    if (irq)
-        __disable_irq();                                                        //disable irq while switching clock
+
+    buddy::DisableInterrupts disable_interrupts;
     HAL_RCC_ClockConfig(&RCC_ClkInitStruct, sys_calc_flash_latency(HSE_VALUE)); //set Clk config first
     HAL_RCC_OscConfig(&RCC_OscInitStruct);                                      //set Osc config
-    if (irq)
-        __enable_irq();
-    //HAL_RCC_GetOscConfig(&RCC_OscInitStruct);
-    //HAL_RCC_GetClockConfig(&RCC_ClkInitStruct, &FLatency);
 }
 
 void sys_pll_enable(void) {
-    int irq = __get_PRIMASK() & 1;
     RCC_OscInitTypeDef RCC_OscInitStruct = { 0 };
     RCC_ClkInitTypeDef RCC_ClkInitStruct = { 0 };
 
@@ -112,14 +140,10 @@ void sys_pll_enable(void) {
         return;                                               //already enabled - exit
     RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;              //set PLL off
     RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK; //set CLK source HSE
-    if (irq)
-        __disable_irq();                                                           //disable irq while switching clock
+
+    buddy::DisableInterrupts disable_interrupts;
     HAL_RCC_OscConfig(&RCC_OscInitStruct);                                         //set Osc config first
     HAL_RCC_ClockConfig(&RCC_ClkInitStruct, sys_calc_flash_latency(sys_pll_freq)); //set Clk config
-    if (irq)
-        __enable_irq();
-    //HAL_RCC_GetOscConfig(&RCC_OscInitStruct);
-    //HAL_RCC_GetClockConfig(&RCC_ClkInitStruct, &FLatency);
 }
 
 int sys_sscg_is_enabled(void) {
@@ -128,17 +152,16 @@ int sys_sscg_is_enabled(void) {
 
 void sys_sscg_disable(void) {
     uint32_t sscgr = RCC->SSCGR;
-    __disable_irq();
+    buddy::DisableInterrupts disable_interrupts;
     if ((sscgr & RCC_SSCGR_SSCGEN_Msk) == 0)
         return;
     sscgr &= ~((1 << RCC_SSCGR_SSCGEN_Pos) & RCC_SSCGR_SSCGEN_Msk);
     sys_pll_disable();
     RCC->SSCGR = sscgr;
     sys_pll_enable();
-    _dbg0("written SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
+    log_debug(Buddy, "written SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
     sscgr = RCC->SSCGR;
-    _dbg0("readback SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
-    __enable_irq();
+    log_debug(Buddy, "readback SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
 }
 
 void sys_sscg_enable(void) {
@@ -150,14 +173,13 @@ void sys_sscg_enable(void) {
     if (incstep == 0)
         return;
     sscgr |= (1 << RCC_SSCGR_SSCGEN_Pos) & RCC_SSCGR_SSCGEN_Msk;
-    __disable_irq();
+    buddy::DisableInterrupts disable_interrupts;
     sys_pll_disable();
     RCC->SSCGR = sscgr;
     sys_pll_enable();
-    _dbg0("written SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
+    log_debug(Buddy, "written SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
     sscgr = RCC->SSCGR;
-    _dbg0("readback SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
-    __enable_irq();
+    log_debug(Buddy, "readback SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
 }
 
 void sys_sscg_set_config(int freq, int depth) {
@@ -169,11 +191,11 @@ void sys_sscg_set_config(int freq, int depth) {
     uint32_t incstep = ((sscgr & RCC_SSCGR_INCSTEP_Msk) >> RCC_SSCGR_INCSTEP_Pos);
     uint32_t spreadsel = ((sscgr & RCC_SSCGR_SPREADSEL_Msk) >> RCC_SSCGR_SPREADSEL_Pos);
     uint32_t sscgen = ((sscgr & RCC_SSCGR_SSCGEN_Msk) >> RCC_SSCGR_SSCGEN_Pos);
-    _dbg0("SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
-    _dbg0(" MODPER    = 0x%08lx (%lu)", modper, modper);
-    _dbg0(" INCSTEP   = 0x%08lx (%lu)", incstep, incstep);
-    _dbg0(" SPREADSEL = 0x%08lx (%lu)", spreadsel, spreadsel);
-    _dbg0(" SSCGEN    = 0x%08lx (%lu)", sscgen, sscgen);
+    log_debug(Buddy, "SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
+    log_debug(Buddy, " MODPER    = 0x%08lx (%lu)", modper, modper);
+    log_debug(Buddy, " INCSTEP   = 0x%08lx (%lu)", incstep, incstep);
+    log_debug(Buddy, " SPREADSEL = 0x%08lx (%lu)", spreadsel, spreadsel);
+    log_debug(Buddy, " SSCGEN    = 0x%08lx (%lu)", sscgen, sscgen);
     HAL_RCC_GetOscConfig(&RCC_OscInitStruct); //read Osc config
     plln = RCC_OscInitStruct.PLL.PLLN;
     //modulation frequency = freq
@@ -192,17 +214,17 @@ void sys_sscg_set_config(int freq, int depth) {
     sys_pll_disable();
     RCC->SSCGR = sscgr;
     sys_pll_enable();
-    _dbg0("written SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
+    log_debug(Buddy, "written SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
     sscgr = RCC->SSCGR;
     modper = ((sscgr & RCC_SSCGR_MODPER_Msk) >> RCC_SSCGR_MODPER_Pos);
     incstep = ((sscgr & RCC_SSCGR_INCSTEP_Msk) >> RCC_SSCGR_INCSTEP_Pos);
     spreadsel = ((sscgr & RCC_SSCGR_SPREADSEL_Msk) >> RCC_SSCGR_SPREADSEL_Pos);
     sscgen = ((sscgr & RCC_SSCGR_SSCGEN_Msk) >> RCC_SSCGR_SSCGEN_Pos);
-    _dbg0("readback SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
-    _dbg0(" MODPER    = 0x%08lx (%lu)", modper, modper);
-    _dbg0(" INCSTEP   = 0x%08lx (%lu)", incstep, incstep);
-    _dbg0(" SPREADSEL = 0x%08lx (%lu)", spreadsel, spreadsel);
-    _dbg0(" SSCGEN    = 0x%08lx (%lu)", sscgen, sscgen);
+    log_debug(Buddy, "readback SSCGR = 0x%08lx (%lu)", sscgr, sscgr);
+    log_debug(Buddy, " MODPER    = 0x%08lx (%lu)", modper, modper);
+    log_debug(Buddy, " INCSTEP   = 0x%08lx (%lu)", incstep, incstep);
+    log_debug(Buddy, " SPREADSEL = 0x%08lx (%lu)", spreadsel, spreadsel);
+    log_debug(Buddy, " SSCGEN    = 0x%08lx (%lu)", sscgen, sscgen);
 }
 
 int sys_sscg_get_config(float *pfreq, float *pdepth) {
@@ -232,14 +254,10 @@ uint32_t _spi_prescaler(int prescaler_num) {
 }
 
 void sys_spi_set_prescaler(int prescaler_num) {
-    int irq = __get_PRIMASK() & 1;
-    if (irq)
-        __disable_irq(); //disable irq while switching clock
+    buddy::DisableInterrupts disable_interrupts;
     HAL_SPI_DeInit(&hspi2);
     hspi2.Init.BaudRatePrescaler = _spi_prescaler(prescaler_num);
     HAL_SPI_Init(&hspi2);
-    if (irq)
-        __enable_irq();
 }
 
 int sys_fw_update_is_enabled(void) {
@@ -257,15 +275,12 @@ void sys_fw_update_disable(void) {
 int sys_fw_update_on_restart_is_enabled(void) {
     return (FW_UPDATE_ENABLE == ram_data_exchange.fw_update_flag) ? 1 : 0;
 }
-int sys_fw_update_older_on_restart_is_enabled(void) {
-    return (FW_UPDATE_OLDER == ram_data_exchange.fw_update_flag) ? 1 : 0;
-}
 
 void sys_fw_update_on_restart_enable(void) {
     ram_data_exchange.fw_update_flag = FW_UPDATE_ENABLE;
 }
 
-void sys_fw_update_older_on_restart_enable(void) {
+extern void sys_fw_update_older_on_restart_enable(void) {
     ram_data_exchange.fw_update_flag = FW_UPDATE_OLDER;
 }
 
@@ -273,24 +288,12 @@ void sys_fw_update_on_restart_disable(void) {
     ram_data_exchange.fw_update_flag = FW_UPDATE_DISABLE;
 }
 
-// returns 1 if last byte in the flash is nonzero
-int sys_fw_is_valid(void) {
-    return (*psys_fw_valid != 0) ? 1 : 0;
+int sys_fw_update_older_on_restart_is_enabled(void) {
+    return (FW_UPDATE_OLDER == ram_data_exchange.fw_update_flag) ? 1 : 0;
 }
 
-// write zero to last byte in the flash
-int sys_fw_invalidate(void) {
-    uint8_t zero = 0x00;
-    if (sys_flash_is_empty((void *)(psys_fw_valid), 1))
-        if (sys_flash_write((void *)(psys_fw_valid), &zero, 1) != 1)
-            return 0;
-    return (*psys_fw_valid == zero) ? 1 : 0;
-}
-
-// format last flash sector (128kB 0x)
-// for testing purposes only - not used in firmware
-int sys_fw_validate(void) {
-    return sys_flash_erase_sector(FLASH_SECTOR_11);
+int sys_bootloader_is_valid(void) {
+    return ram_data_exchange.bootloader_valid ? 1 : 0;
 }
 
 int sys_flash_is_empty(void *ptr, int size) {

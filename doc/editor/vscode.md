@@ -5,6 +5,7 @@
 1. In Visual Studio Code, install the following extensions:
     - `CMake Tools` (handles configuring and building the project, requires CMake to be installed),
     - `Cortex-Debug` and `Cortex-Debug: Device Support Pack - STM32F4` (support for debugging of the firmware),
+        - The most recent and working `Cortex-Debug` for `ST-LINK` is `1.1.0`
     - `ccls` extension, which provides autocompletion and code navigation.
     - `Code Spell Checker` (streetsidesoftware.code-spell-checker) extension, which provides spell checking and correction suggestions.
 2. Install [ccls](https://github.com/MaskRay/ccls) on your system
@@ -60,7 +61,10 @@ Workaround is to reinstall CMake, close vscode and with another start the projec
 Most likely, your OpenOCD is too old (or let's rephrase it - not new enough). The general solution is to uninstall it and build it from source yourself! Yay! 💪
 
 1. `git clone https://github.com/ntfreak/openocd.git`
-2. And follow the instructions in the readme (your are mostly interested in `OpenOCD Dependencies` and `Compiling OpenOCD`).
+2. And follow the instructions in the readme (your are mostly interested in `OpenOCD Dependencies` and `Compiling OpenOCD`). These tips would be handy during the process:
+    1. use `--enable-stlink` parameter in `./configure`
+    1. run `sudo apt install libusb-1.0-0-dev` (installs USB dependency)
+    1. use `-j` parameter in `make`
 
 #### Linux/Ubuntu: libusb_open() failed with LIBUSB_ERROR_ACCESS
 If you get an error like this, you are missing permissions to access the USB interface:
@@ -70,6 +74,14 @@ On Ubuntu this may be solved:
 echo 'SUBSYSTEM=="usb",GROUP="users",MODE="0666"' > /etc/udev/rules.d/90-usbpermission.rules
 udevadm control --reload-rules
 ```
+If you face permission issues run this:
+```bash
+sudo touch /etc/udev/rules.d/90-usbpermission.rules
+sudo vim /etc/udev/rules.d/90-usbpermission.rules
+sudo udevadm control --reload-rules
+```
+You can pick your favorite editor instead in `vim`. In the editor place this line, save and quit:
+`SUBSYSTEM=="usb",GROUP="users",MODE="0666"`
 
 Unplug and plug the STlink back and it should work.
 

@@ -6,6 +6,7 @@
 #include "malloc.h"
 #include "heap.h"
 #include "media.h"
+#include "timing.h"
 
 #include "../Marlin/src/module/temperature.h"
 #include "../Marlin/src/module/planner.h"
@@ -19,13 +20,20 @@ void Buddy::Metrics::RecordRuntimeStats() {
     static metric_t stack = METRIC("stack", METRIC_VALUE_CUSTOM, 0, METRIC_HANDLER_ENABLE_ALL);
     static TaskStatus_t task_statuses[11];
     static uint32_t last_recorded_ticks = 0;
-    if (HAL_GetTick() - last_recorded_ticks > 3000) {
+    if (ticks_diff(ticks_ms(), last_recorded_ticks) > 3000) {
         int count = uxTaskGetSystemState(task_statuses, sizeof(task_statuses) / sizeof(task_statuses[1]), NULL);
         for (int idx = 0; idx < count; idx++) {
-            size_t s = malloc_usable_size(task_statuses[idx].pxStackBase);
-            metric_record_custom(&stack, ",n=%.7s t=%i,m=%hu", task_statuses[idx].pcTaskName, s, task_statuses[idx].usStackHighWaterMark);
+            const char *stack_base = (char *)task_statuses[idx].pxStackBase;
+            size_t s = 0;
+            /* We can only report free stack space for heap-allocated stack frames. */
+            if (mem_is_heap_allocated(stack_base))
+                s = malloc_usable_size((void *)stack_base);
+            const char *task_name = task_statuses[idx].pcTaskName;
+            if (strcmp(task_name, "Tmr Svc") == 0)
+                task_name = "TmrSvc";
+            metric_record_custom(&stack, ",n=%.7s t=%i,m=%hu", task_name, s, task_statuses[idx].usStackHighWaterMark);
         }
-        last_recorded_ticks = HAL_GetTick();
+        last_recorded_ticks = ticks_ms();
     }
 
     static metric_t heap = METRIC("heap", METRIC_VALUE_CUSTOM, 503, METRIC_HANDLER_ENABLE_ALL);

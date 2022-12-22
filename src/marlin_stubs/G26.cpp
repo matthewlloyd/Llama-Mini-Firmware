@@ -1,12 +1,6 @@
 #include <algorithm>
 
-#include "../../lib/Marlin/Marlin/src/inc/MarlinConfig.h"
-#include "../../lib/Marlin/Marlin/src/feature/host_actions.h"
-#include "../../lib/Marlin/Marlin/src/feature/safety_timer.h"
-#include "../../lib/Marlin/Marlin/src/gcode/gcode.h"
-#include "../../lib/Marlin/Marlin/src/module/motion.h"
 #include "../../lib/Marlin/Marlin/src/module/temperature.h"
-#include "../../lib/Marlin/Marlin/src/Marlin.h"
 #include "marlin_server.hpp"
 #include "client_fsm_types.h"
 #include "PrusaGcodeSuite.hpp"
@@ -328,9 +322,6 @@ void FirstLayer::print_shape_2() {
     //TODO setprecent? ////M73 P96 R0
     go_to_destination(NAN, NAN, 30.2f, NAN, 720.f); // G1 Z30.2 F720 ; Move print head further up
     planner.synchronize();                          // G4 ; wait .. finish moves == M400
-    thermalManager.setTargetHotend(0, 0);           // M104 S0 ; turn off temperature
-    thermalManager.setTargetBed(0);                 // M140 S0 ; turn off heatbed
-    thermalManager.set_fan_speed(0, 0);             //M107 ; turn off fan
 
     //no need lro reset linear advance, was not set // M900 K0 ; reset LA
     planner.finish_and_disable(); // M84 ; disable motors

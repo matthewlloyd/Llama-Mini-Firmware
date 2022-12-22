@@ -6,6 +6,12 @@
 #include "marlin_errors.h"
 #include "client_fsm_types.h"
 
+#include <stddef.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif //__cplusplus
+
 // server flags
 // FIXME define the same type for these and marlin_server.flags
 static const uint16_t MARLIN_SFLG_STARTED = 0x0001; // server started (set in marlin_server_init)
@@ -18,10 +24,6 @@ static const uint16_t MARLIN_SFLG_EXCMODE = 0x0010; // exclusive mode enabled (c
 static const uint8_t MARLIN_UPDATE_PERIOD = 100;
 
 typedef void(marlin_server_idle_t)(void);
-
-#ifdef __cplusplus
-extern "C" {
-#endif //__cplusplus
 
 // callback for idle operation inside marlin (called from ExtUI handler onIdle)
 extern marlin_server_idle_t *marlin_server_idle_cb;
@@ -47,11 +49,17 @@ extern void marlin_server_stop_processing(void);
 // direct call of babystep.add_steps(Z_AXIS, ...)
 extern void marlin_server_do_babystep_Z(float offs);
 
-// direct call of 'enqueue_and_echo_command', returns 1 if command enqueued, otherwise 0
-extern int marlin_server_enqueue_gcode(const char *gcode);
+extern void marlin_server_move_axis(float pos, float feedrate, size_t axis);
 
-// direct call of 'inject_P', returns 1 if command enqueued, otherwise 0
-extern int marlin_server_inject_gcode(const char *gcode);
+// direct call of 'enqueue_and_echo_command'
+// @retval true command enqueued
+// @retval false otherwise
+extern bool marlin_server_enqueue_gcode(const char *gcode);
+
+// direct call of 'inject_P'
+// @retval true command enqueued
+// @retval false otherwise
+extern bool marlin_server_inject_gcode(const char *gcode);
 
 // direct call of settings.save()
 extern void marlin_server_settings_save(void);
@@ -70,6 +78,12 @@ extern void marlin_server_manage_heater(void);
 // direct call of planner.quick_stop()
 extern void marlin_server_quick_stop(void);
 
+// direct print file with SFM format
+void marlin_server_print_start(const char *filename);
+
+// preselects file for print
+void marlin_server_set_current_file(const char *filename);
+
 //
 extern uint32_t marlin_server_get_command(void);
 
@@ -77,7 +91,7 @@ extern uint32_t marlin_server_get_command(void);
 extern void marlin_server_set_command(uint32_t command);
 
 //
-extern void marlin_server_test_start(uint32_t mask);
+extern void marlin_server_test_start(uint64_t mask);
 
 //
 extern void marlin_server_test_abort(void);
@@ -95,7 +109,10 @@ extern void marlin_server_print_resume(void);
 extern void marlin_server_print_reheat_start(void);
 
 //
-extern int marlin_server_print_reheat_ready(void);
+extern bool marlin_server_print_reheat_ready();
+
+// return true if the printer is not moving (idle, paused, aborted or finished)
+extern bool marlin_server_printer_idle();
 
 //
 extern void marlin_server_park_head(void);
@@ -123,6 +140,9 @@ extern float marlin_server_get_temp_to_display(void);
 
 //
 extern float marlin_server_get_temp_nozzle(void);
+
+//
+extern void marlin_server_resuming_begin(void);
 
 extern uint32_t marlin_server_get_user_click_count(void);
 

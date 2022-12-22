@@ -1,6 +1,7 @@
 #include "metric.h"
 #include "cmsis_os.h"
-#include "dbg.h"
+#include "timing.h"
+#include "log.h"
 #include "stm32f4xx_hal.h"
 #include <stdarg.h>
 #include <stdbool.h>
@@ -22,6 +23,9 @@ static metric_handler_t **metric_system_handlers;
 static bool metric_system_initialized = false;
 static uint16_t dropped_points_count = 0;
 static metric_t *metric_linked_list_root = NULL;
+
+// logging component
+LOG_COMPONENT_DEF(Metrics, LOG_SEVERITY_INFO);
 
 // internal metrics
 metric_t metric_dropped_points = METRIC("points_dropped", METRIC_VALUE_INTEGER, 1000, METRIC_HANDLER_ENABLE_ALL);
@@ -69,13 +73,13 @@ static void metric_system_task_run() {
 
 static bool check_min_interval(metric_t *metric) {
     if (metric->min_interval_ms)
-        return (HAL_GetTick() - metric->_last_update_timestamp) >= metric->min_interval_ms;
+        return ticks_diff(ticks_ms(), metric->_last_update_timestamp) >= (int32_t)metric->min_interval_ms;
     else
         return true;
 }
 
 static void update_min_interval(metric_t *metric) {
-    metric->_last_update_timestamp = HAL_GetTick();
+    metric->_last_update_timestamp = ticks_ms();
 }
 
 static metric_point_t *point_check_and_prepare(metric_t *metric, metric_value_type_t type) {
@@ -86,6 +90,7 @@ static metric_point_t *point_check_and_prepare(metric_t *metric, metric_value_ty
     if (!check_min_interval(metric))
         return NULL;
     if (metric->type != type) {
+        log_error(Metrics, "Attempt to record an invalid value type for metric %s", metric->name);
         metric_record_error(metric, "invalid type");
         return NULL;
     }
@@ -99,7 +104,7 @@ static metric_point_t *point_check_and_prepare(metric_t *metric, metric_value_ty
     }
     point->metric = metric;
     point->error = false;
-    point->timestamp = HAL_GetTick();
+    point->timestamp = ticks_ms();
     return point;
 }
 
@@ -139,7 +144,7 @@ void metric_record_string(metric_t *metric, const char *fmt, ...) {
         return;
     va_list args;
     va_start(args, fmt);
-    vsnprintf_P(recording->value_str, sizeof(recording->value_str), fmt, args);
+    vsnprintf(recording->value_str, sizeof(recording->value_str), fmt, args);
     va_end(args);
     point_enqueue(recording);
 }
@@ -150,7 +155,7 @@ void metric_record_custom(metric_t *metric, const char *fmt, ...) {
         return;
     va_list args;
     va_start(args, fmt);
-    vsnprintf_P(recording->value_custom, sizeof(recording->value_custom), fmt, args);
+    vsnprintf(recording->value_custom, sizeof(recording->value_custom), fmt, args);
     va_end(args);
     point_enqueue(recording);
 }
@@ -178,7 +183,15 @@ void metric_record_error(metric_t *metric, const char *fmt, ...) {
     recording->error = true;
     va_list args;
     va_start(args, fmt);
-    vsnprintf_P(recording->error_msg, sizeof(recording->error_msg), fmt, args);
+    vsnprintf(recording->error_msg, sizeof(recording->error_msg), fmt, args);
     va_end(args);
     point_enqueue(recording);
+}
+
+void metric_enable_for_handler(metric_t *metric, metric_handler_t *handler) {
+    metric->enabled_handlers |= (1 << handler->identifier);
+}
+
+void metric_disable_for_handler(metric_t *metric, metric_handler_t *handler) {
+    metric->enabled_handlers &= ~(1 << handler->identifier);
 }

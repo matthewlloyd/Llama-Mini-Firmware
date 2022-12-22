@@ -3,35 +3,28 @@
 #include "appmain.hpp"
 #include "app.h"
 #include "app_metrics.h"
-#include "dbg.h"
+#include "log.h"
 #include "cmsis_os.h"
 #include "config.h"
-#include "dbg.h"
-#include "adc.h"
+#include "adc.hpp"
 #include "Jogwheel.hpp"
 #include "hwio.h"
 #include "sys.h"
 #include "gpio.h"
+#include "metric.h"
+#include "print_utils.hpp"
 #include "sound.hpp"
 #include "language_eeprom.hpp"
-#include "usbd_cdc_if.h"
 
 #ifdef SIM_HEATER
     #include "sim_heater.h"
 #endif //SIM_HEATER
 
-#ifdef SIM_MOTION
-    #include "sim_motion.h"
-#endif //SIM_MOTION
-
-#include "uartslave.h"
 #include "marlin_server.h"
 #include "bsod.h"
 #include "eeprom.h"
-#include "diag.h"
 #include "safe_state.h"
 #include "crc32.h"
-#include "ff.h"
 #include "dump.h"
 #include "llama.h"
 
@@ -41,34 +34,33 @@
 
 #ifdef NEW_FANCTL
     #include "fanctl.h"
-CFanCtl fanctl0 = CFanCtl(
-    buddy::hw::fan0pwm,
-    buddy::hw::fan0tach,
-    FANCTL0_PWM_MIN, FANCTL0_PWM_MAX,
-    FANCTL0_RPM_MIN, FANCTL0_RPM_MAX,
-    FANCTL0_PWM_THR,
+CFanCtl fanCtlPrint = CFanCtl(
+    buddy::hw::fanPrintPwm,
+    buddy::hw::fanPrintTach,
+    FANCTLPRINT_PWM_MIN, FANCTLPRINT_PWM_MAX,
+    FANCTLPRINT_RPM_MIN, FANCTLPRINT_RPM_MAX,
+    FANCTLPRINT_PWM_THR,
     is_autofan_t::no);
-CFanCtl fanctl1 = CFanCtl(
-    buddy::hw::fan1pwm,
-    buddy::hw::fan1tach,
-    FANCTL1_PWM_MIN, FANCTL1_PWM_MAX,
-    FANCTL1_RPM_MIN, FANCTL1_RPM_MAX,
-    FANCTL1_PWM_THR,
+CFanCtl fanCtlHeatBreak = CFanCtl(
+    buddy::hw::fanHeatBreakPwm,
+    buddy::hw::fanHeatBreakTach,
+    FANCTLHEATBREAK_PWM_MIN, FANCTLHEATBREAK_PWM_MAX,
+    FANCTLHEATBREAK_RPM_MIN, FANCTLHEATBREAK_RPM_MAX,
+    FANCTLHEATBREAK_PWM_THR,
     is_autofan_t::yes);
 #endif //NEW_FANCTL
 
-#define DBG _dbg0 //debug level 0
-//#define DBG(...)  //disable debug
-
-extern void USBSerial_put_rx_data(uint8_t *buffer, uint32_t length);
-extern void app_cdc_rx(uint8_t *buffer, uint32_t length);
+LOG_COMPONENT_DEF(Marlin, LOG_SEVERITY_INFO);
+LOG_COMPONENT_DEF(Buddy, LOG_SEVERITY_DEBUG);
+LOG_COMPONENT_DEF(Core, LOG_SEVERITY_INFO);
 
 extern void reset_trinamic_drivers();
 
 extern "C" {
 
-extern uartrxbuff_t uart6rxbuff; // PUT rx buffer
-extern uartslave_t uart6slave;   // PUT slave
+#ifndef USE_ESP01_WITH_UART6
+extern uartslave_t uart6slave; // PUT slave
+#endif
 
 #ifdef BUDDY_ENABLE_ETHERNET
 extern osThreadId webServerTaskHandle; // Webserver thread(used for fast boot mode)
@@ -81,58 +73,40 @@ void app_setup(void) {
         init_tmc_bare_minimum();
     }
 
-    // enable cdc
-    usbd_cdc_register_receive_fn(app_cdc_rx);
-
     setup();
 
     marlin_server_settings_load(); // load marlin variables from eeprom
-    //DBG("after init_tmc (%ld ms)", HAL_GetTick());
 }
 
 void app_idle(void) {
     Buddy::Metrics::RecordMarlinVariables();
     Buddy::Metrics::RecordRuntimeStats();
     Buddy::Metrics::RecordPrintFilename();
+    print_utils_loop();
     osDelay(0); // switch to other threads - without this is UI slow during printing
 }
 
-void app_run(void) {
-    DBG("app_run");
+void app_setup_marlin_logging();
 
-#ifdef BUDDY_ENABLE_ETHERNET
-    if (diag_fastboot)
-        osThreadResume(webServerTaskHandle);
-#endif //BUDDY_ENABLE_ETHERNET
+void app_run(void) {
+    app_setup_marlin_logging();
 
     LangEEPROM::getInstance();
 
     marlin_server_init();
     marlin_server_idle_cb = app_idle;
 
-    adc_init();
-
 #ifdef SIM_HEATER
     sim_heater_init();
 #endif //SIM_HEATER
 
-    //DBG("before setup (%ld ms)", HAL_GetTick());
-    if (diag_fastboot || (!sys_fw_is_valid())) {
-        if (!sys_fw_is_valid()) // following code will be done only with invalidated firmware
-        {
-            hwio_safe_state(); // safe states
-            for (int i = 0; i < hwio_fan_get_cnt(); ++i)
-                hwio_fan_set_pwm(i, 0); // disable fans
-        }
-        if (INIT_TRINAMIC_FROM_MARLIN_ONLY == 0) {
-            init_tmc();
-        }
-        reset_trinamic_drivers();
-    } else {
-        app_setup();
-        marlin_server_start_processing();
-    }
-    //DBG("after setup (%ld ms)", HAL_GetTick());
+    log_info(Marlin, "Starting setup");
+
+    app_setup();
+
+    marlin_server_start_processing();
+
+    log_info(Marlin, "Setup complete");
 
     if (eeprom_init() == EEPROM_INIT_Defaults && marlin_server_processing()) {
         settings.reset();
@@ -142,65 +116,10 @@ void app_run(void) {
         if (marlin_server_processing()) {
             loop();
         }
+#ifndef USE_ESP01_WITH_UART6
         uartslave_cycle(&uart6slave);
+#endif
         marlin_server_loop();
-        osDelay(0); // switch to other threads - without this is UI slow
-#ifdef JOGWHEEL_TRACE
-        static int signals = jogwheel_signals;
-        if (signals != jogwheel_signals) {
-            signals = jogwheel_signals;
-            DBG("%d %d", signals, jogwheel_encoder);
-        }
-#endif //JOGWHEEL_TRACE
-#ifdef SIM_MOTION_TRACE_X
-        static int32_t x = sim_motion_pos[0];
-        if (x != sim_motion_pos[0]) {
-            x = sim_motion_pos[0];
-            DBG("X:%li", x);
-        }
-#endif //SIM_MOTION_TRACE_X
-#ifdef SIM_MOTION_TRACE_Y
-        static int32_t y = sim_motion_pos[1];
-        if (y != sim_motion_pos[1]) {
-            y = sim_motion_pos[1];
-            DBG("Y:%li", y);
-        }
-#endif //SIM_MOTION_TRACE_Y
-#ifdef SIM_MOTION_TRACE_Z
-        static int32_t z = sim_motion_pos[2];
-        if (z != sim_motion_pos[2]) {
-            z = sim_motion_pos[2];
-            DBG("Z:%li", z);
-        }
-#endif //SIM_MOTION_TRACE_Z
-#if defined(FANCTL0_TRACE) && defined(FANCTL0_TRACE)
-        static uint16_t rpm0_tmp = 0;
-        static uint16_t rpm1_tmp = 0;
-        uint16_t rpm0 = fanctl0.getActualRPM();
-        uint16_t rpm1 = fanctl1.getActualRPM();
-        if ((rpm0_tmp != rpm0) || (rpm1_tmp != rpm1)) {
-            rpm0_tmp = rpm0;
-            rpm1_tmp = rpm1;
-            _dbg("rpm0: %-5u rpm1: %-5u", rpm0, rpm1);
-        }
-#else //defined(FANCTL0_TRACE) && defined(FANCTL0_TRACE)
-    #ifdef FANCTL0_TRACE
-        static uint16_t rpm0_tmp = 0;
-        uint16_t rpm0 = fanctl0.getActualRPM();
-        if (rpm0_tmp != rpm0) {
-            rpm0_tmp = rpm0;
-            _dbg("rpm0: %u", rpm0);
-        }
-    #endif //FANCTL0_TRACE
-    #ifdef FANCTL1_TRACE
-        static uint16_t rpm1_tmp = 0;
-        uint16_t rpm1 = fanctl1.getActualRPM();
-        if (rpm1_tmp != rpm1) {
-            rpm1_tmp = rpm1;
-            _dbg("rpm1: %u", rpm1);
-        }
-    #endif //FANCTL1_TRACE
-#endif     //defined(FANCTL0_TRACE) && defined(FANCTL0_TRACE)
     }
 }
 
@@ -212,13 +131,64 @@ void app_assert(uint8_t *file, uint32_t line) {
     bsod("app_assert");
 }
 
-void app_cdc_rx(uint8_t *buffer, uint32_t length) {
-    if (!marlin_server_get_exclusive_mode()) // serial line is disabled in exclusive mode
-        USBSerial_put_rx_data(buffer, length);
+void app_marlin_serial_output_write_hook(const uint8_t *buffer, int size) {
+    while (size && (buffer[size - 1] == '\n' || buffer[size - 1] == '\r'))
+        size--;
+    log_severity_t severity = LOG_SEVERITY_INFO;
+    if (size == 2 && memcmp("ok", buffer, 2) == 0) {
+        // Do not log "ok" messages
+        return;
+    } else if (size >= 5 && memcmp("echo:", buffer, 5) == 0) {
+        buffer = buffer + 5;
+        size -= 5;
+    }
+    if (size >= 6 && memcmp("Error:", buffer, 6) == 0) {
+        buffer = buffer + 6;
+        size -= 6;
+        severity = LOG_SEVERITY_ERROR;
+    }
+    log_event(severity, Marlin, "%.*s", size, buffer);
 }
 
+void app_setup_marlin_logging() {
+    SerialUSB.lineBufferHook = app_marlin_serial_output_write_hook;
+}
+
+#ifdef NEW_FANCTL
+static void record_fanctl_metrics() {
+    static metric_t metric = METRIC("fan", METRIC_VALUE_CUSTOM, 0, METRIC_HANDLER_ENABLE_ALL);
+    static uint32_t last_update = 0;
+
+    auto record = [](CFanCtl &fanctl, const char *fan_name) {
+        auto fanStateToInt = [](CFanCtl::FanState state) {
+            switch (state) {
+            case CFanCtl::FanState::idle:
+                return 0;
+            case CFanCtl::FanState::starting:
+                return 1;
+            case CFanCtl::FanState::running:
+                return 2;
+            default:
+                return -1;
+            }
+        };
+        int state = fanStateToInt(fanctl.getState());
+        float pwm = static_cast<float>(fanctl.getPWM()) / static_cast<float>(fanctl.getMaxPWM());
+        float measured = static_cast<float>(fanctl.getActualRPM()) / static_cast<float>(fanctl.getMaxRPM());
+
+        metric_record_custom(&metric, ",fan=%s state=%i,pwm=%i,measured=%i",
+            fan_name, state, (int)(pwm * 100.0f), (int)(measured * 100.0f));
+    };
+
+    if (HAL_GetTick() - last_update > 987) {
+        record(fanCtlPrint, "print");
+        record(fanCtlHeatBreak, "heatbreak");
+        last_update = HAL_GetTick();
+    }
+}
+#endif
+
 void adc_tick_1ms(void) {
-    adc_cycle();
 #ifdef SIM_HEATER
     static uint8_t cnt_sim_heater = 0;
     if (++cnt_sim_heater >= 50) // sim_heater freq = 20Hz
@@ -227,15 +197,12 @@ void adc_tick_1ms(void) {
         cnt_sim_heater = 0;
     }
 #endif //SIM_HEATER
-
-#ifdef SIM_MOTION
-    sim_motion_cycle();
-#endif //SIM_MOTION
 }
 
 void app_tim14_tick(void) {
 #ifdef NEW_FANCTL
     fanctl_tick();
+    record_fanctl_metrics();
 #endif //NEW_FANCTL
 #ifndef HAS_GUI
     #error "HAS_GUI not defined."

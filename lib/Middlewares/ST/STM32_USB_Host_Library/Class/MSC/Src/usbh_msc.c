@@ -807,6 +807,7 @@ USBH_StatusTypeDef USBH_MSC_Write(USBH_HandleTypeDef *phost,
                                   uint32_t length)
 {
   uint32_t timeout;
+
   MSC_HandleTypeDef *MSC_Handle = (MSC_HandleTypeDef *) phost->pActiveClass->pData;
 
   if ((phost->device.is_connected == 0U) ||

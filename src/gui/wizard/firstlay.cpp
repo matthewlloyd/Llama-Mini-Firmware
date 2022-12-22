@@ -2,8 +2,8 @@
 #include "i18n.h"
 #include "gui.hpp"
 #include "firstlay.hpp"
-#include "filament_sensor.hpp"
-#include "filament.h"
+#include "filament_sensor_api.hpp"
+#include "filament.hpp"
 #include "window_dlg_preheat.hpp"
 #include "window_dlg_load_unload.hpp"
 #include "marlin_client.h"
@@ -12,6 +12,10 @@
 #include "DialogHandler.hpp"
 #include <algorithm>         // std::max
 #include "screen_wizard.hpp" // ChangeStartState
+#include "bsod.h"
+#include "cmath_ext.h"
+#include "M70X.hpp"
+#include "SteelSheets.hpp"
 
 enum {
     FKNOWN = 0x01,      //filament is known
@@ -20,8 +24,8 @@ enum {
 
 WizardState_t StateFnc_FIRSTLAY_FILAMENT_ASK() {
     uint8_t filament = 0;
-    filament |= get_filament() != FILAMENT_NONE ? FKNOWN : 0;
-    filament |= fs_get_state() == fsensor_t::NoFilament ? F_NOTSENSED : 0;
+    filament |= Filaments::CurrentIndex() != filament_t::NONE ? FKNOWN : 0;
+    filament |= FSensors_instance().GetPrinter() == fsensor_t::NoFilament ? F_NOTSENSED : 0;
 
     size_t def_bt = filament == (FKNOWN | F_NOTSENSED) ? 1 : 0; //default button
 
@@ -68,15 +72,17 @@ WizardState_t StateFnc_FIRSTLAY_FILAMENT_ASK() {
 }
 
 WizardState_t StateFnc_FIRSTLAY_FILAMENT_ASK_PREHEAT() {
-    set_filament(gui_dlg_preheat_forced(_("Select Filament Type")));
+    PreheatStatus::DialogBlockingPreheat(RetAndCool_t::Neither);
     return WizardState_t::FIRSTLAY_MSBX_CALIB;
 }
 
 WizardState_t StateFnc_FIRSTLAY_FILAMENT_LOAD() {
-    switch (gui_dlg_load_forced()) {
-    case dlg_result_t::ok:
+    auto ret = PreheatStatus::DialogBlockingLoad(RetAndCool_t::Neither);
+
+    switch (ret) {
+    case PreheatStatus::Result::DoneHasFilament:
         return WizardState_t::FIRSTLAY_MSBX_CALIB;
-    case dlg_result_t::aborted:
+    case PreheatStatus::Result::Aborted:
         return WizardState_t::FIRSTLAY_FILAMENT_ASK;
     default:
         return WizardState_t::FIRSTLAY_MSBX_CALIB;
@@ -84,10 +90,10 @@ WizardState_t StateFnc_FIRSTLAY_FILAMENT_LOAD() {
 }
 
 WizardState_t StateFnc_FIRSTLAY_FILAMENT_UNLOAD() {
-    switch (gui_dlg_unload_forced()) {
-    case dlg_result_t::ok:
-        return WizardState_t::FIRSTLAY_FILAMENT_LOAD;
-    case dlg_result_t::aborted:
+    auto ret = PreheatStatus::DialogBlockingUnLoad(RetAndCool_t::Neither);
+    switch (ret) {
+    case PreheatStatus::Result::DoneNoFilament:
+    case PreheatStatus::Result::Aborted:
         return WizardState_t::FIRSTLAY_FILAMENT_ASK;
     default:
         return WizardState_t::FIRSTLAY_MSBX_CALIB;
@@ -105,18 +111,19 @@ WizardState_t StateFnc_FIRSTLAY_MSBX_USEVAL() {
     //show dialog only when values are not equal
     float diff = marlin_vars()->z_offset - z_offset_def;
     if ((diff <= -z_offset_step) || (diff >= z_offset_step)) {
-        char buff[21 * 9];
+        char buff[21 * 9 + 1];
         {
-            char fmt[21 * 9];
+            char fmt[ARRAY_SIZE(buff)];
             // c=21 r=9
             static const char fmt2Translate[] = N_("Do you want to use the current value?\nCurrent: %0.3f.\nDefault: %0.3f.\nClick NO to use the default value (recommended)");
-            _(fmt2Translate).copyToRAM(fmt, sizeof(fmt)); // note the underscore at the beginning of this line
-            snprintf(buff, sizeof(buff) / sizeof(char), fmt, (double)marlin_vars()->z_offset, (double)z_offset_def);
+            _(fmt2Translate).copyToRAM(fmt, ARRAY_SIZE(fmt)); // note the underscore at the beginning of this line
+            snprintf(buff, ARRAY_SIZE(buff), fmt, (double)marlin_vars()->z_offset, (double)z_offset_def);
         }
         // this MakeRAM is safe - buff is allocated in RAM for the lifetime of MsgBox
         if (MsgBox(string_view_utf8::MakeRAM((const uint8_t *)buff), Responses_YesNo) == Response::No) {
-            marlin_set_z_offset(z_offset_def);
-            eeprom_set_var(EEVAR_ZOFFSET, variant8_flt(z_offset_def));
+            if (!SteelSheets::SetZOffset(z_offset_def)) {
+                bsod("Z offset write failed");
+            }
         }
     }
 
@@ -135,11 +142,11 @@ WizardState_t StateFnc_FIRSTLAY_MSBX_START_PRINT() {
 //and it would block dialog opening
 //checking marlin_update_vars(MARLIN_VAR_MSK(MARLIN_VAR_GQUEUE))->gqueue and calling gui_loop() does not help
 WizardState_t StateFnc_FIRSTLAY_PRINT() {
-    DialogHandler::Open(ClientFSM::FirstLayer, 0); //open screen now, it would auto open later (on G26)
+    DialogHandler::PreOpen(ClientFSM::FirstLayer, 0); //open screen now, it would auto open later (on G26)
 
-    const int temp_nozzle_preheat = int(PREHEAT_TEMP);
-    const int temp_nozzle = std::max(int(marlin_vars()->display_nozzle), int(filaments[get_filament()].nozzle));
-    const int temp_bed = std::max(int(marlin_vars()->target_bed), int(filaments[get_filament()].heatbed));
+    const int temp_nozzle_preheat = Filaments::Current().nozzle_preheat;
+    const int temp_nozzle = Filaments::Current().nozzle;
+    const int temp_bed = Filaments::Current().heatbed;
 
     marlin_gcode("M73 P0 R0");                                             // reset progress
     marlin_gcode_printf("M104 S%d D%d", temp_nozzle_preheat, temp_nozzle); // nozzle target
@@ -148,22 +155,29 @@ WizardState_t StateFnc_FIRSTLAY_PRINT() {
     marlin_gcode_printf("M190 R%d", temp_bed);                             // Set target temperature, wait even if cooling
     marlin_gcode("G28");                                                   // autohome
     marlin_gcode("G29");                                                   // mbl
-    marlin_gcode_printf("M104 S%d", temp_nozzle);                          // set displayed temperature
-    marlin_gcode_printf("M109 S%d", temp_nozzle);                          // wait for displayed temperature
+    marlin_gcode_printf("M109 S%d", temp_nozzle);                          // set and wait for nozzle temperature
     marlin_gcode("G26");                                                   // firstlay
 
     WizardState_t ret = WizardState_t::FIRSTLAY_MSBX_REPEAT_PRINT;
     ScreenWizard::ChangeStartState(ret); //marlin_gcode("G26"); will close wizard screen, need to save reopen state
+
+    marlin_gcode("M104 S0 D0"); // nozzle target
+    marlin_gcode("M140 S0");    // bed target
     return ret;
 }
 
 WizardState_t StateFnc_FIRSTLAY_MSBX_REPEAT_PRINT() {
+    if (marlin_error(MARLIN_ERR_ProbingFailed)) {
+        marlin_error_clr(MARLIN_ERR_ProbingFailed);
+        static const char en_text_probing[] = N_("Mesh bed leveling failed. Make sure there is a steel sheet on the heatbed. Repeat the calibration or cancel?");
+        if (MsgBox(_(en_text_probing), Responses_YesCancel, 1) == Response::Yes) {
+            return WizardState_t::FIRSTLAY_MSBX_USEVAL;
+        }
+        return WizardState_t::FIRSTLAY_RESULT;
+    }
     static const char en_text[] = N_("Do you want to repeat the last step and readjust the distance between the nozzle and heatbed?");
     string_view_utf8 translatedText = _(en_text);
     if (MsgBox(translatedText, Responses_YesNo, 1) == Response::No) {
-        marlin_gcode("M104 S0"); // nozzle target
-        marlin_gcode("M140 S0"); // bed target
-
         return WizardState_t::FIRSTLAY_RESULT;
     } else {
         static const char en_text[] = N_("Clean steel sheet.");
@@ -176,10 +190,10 @@ WizardState_t StateFnc_FIRSTLAY_MSBX_REPEAT_PRINT() {
 
 WizardState_t StateFnc_FIRSTLAY_RESULT() {
     //save eeprom flag
-    eeprom_set_var(EEVAR_RUN_FIRSTLAY, variant8_ui8(0)); // clear first layer flag
+    eeprom_set_bool(EEVAR_RUN_FIRSTLAY, false); // clear first layer flag
     return WizardState_t::FINISH;
 
-    //use folowing code when firstlay fails
+    //use following code when firstlay fails
 #if 0
     //save eeprom flag
     static const char en_text[] = N_("The first layer calibration failed to finish. Double-check the printer's wiring, nozzle and axes, then restart the calibration.");

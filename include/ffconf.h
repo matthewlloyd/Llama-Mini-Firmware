@@ -103,7 +103,7 @@
 */
 
 #define FF_USE_LFN 2
-#define FF_MAX_LFN (96 + 1 + 5 + 1)
+#include "../src/gui/file_list_defs.h"
 /* The FF_USE_LFN switches the support for LFN (long file name).
 /
 /   0: Disable LFN. FF_MAX_LFN has no effect.
@@ -267,5 +267,3 @@
 /  The FF_SYNC_t defines O/S dependent sync object type. e.g. HANDLE, ID, OS_EVENT*,
 /  SemaphoreHandle_t and etc. A header file for O/S definitions needs to be
 /  included somewhere in the scope of ff.h. */
-
-/*--- End of configuration options ---*/

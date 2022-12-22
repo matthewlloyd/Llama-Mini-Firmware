@@ -1,11 +1,7 @@
-#include "dbg.h"
 #include "screen_printing_serial.hpp"
 #include "config.h"
 #include "marlin_client.h"
-#include "filament.h"
-#include "marlin_server.h"
-#include "guitypes.hpp"    //font_meas_text
-#include "stm32f4xx_hal.h" //HAL_GetTick
+#include "filament.hpp"
 #include "i18n.h"
 #include "ScreenHandler.hpp"
 #include "screen_menus.hpp"
@@ -17,7 +13,7 @@ static point_ui16_t pt_ico() { return icon_meas(resource_ptr(IDR_PNG_serial_prin
 screen_printing_serial_data_t::screen_printing_serial_data_t()
     : AddSuperWindow<ScreenPrintingModel>(_(caption))
     , octo_icon(this, Rect16(120 - pt_ico().x / 2, GuiDefaults::RectScreenBody.Top() + 8, pt_ico().x, pt_ico().y), IDR_PNG_serial_printing)
-    , w_progress(this, { 10, GuiDefaults::RectScreenBody.Top() + pt_ico().y + 14}, HasNumber_t::yes)
+    , w_progress(this, Rect16(10, GuiDefaults::RectScreenBody.Top() + pt_ico().y + 14, GuiDefaults::RectScreen.Width() - 2 * 10, 16))
     , w_message(this, Rect16(10, GuiDefaults::RectScreenBody.Top() + pt_ico().y + 60, GuiDefaults::RectScreen.Width() - 2 * 10, 20))
     , last_tick(0)
     , connection(connection_state_t::connected) {
@@ -29,7 +25,7 @@ screen_printing_serial_data_t::screen_printing_serial_data_t()
     octo_icon.Unshadow();
 
     w_message.font = resource_font(IDR_FNT_SMALL);
-    w_message.SetAlignment(ALIGN_CENTER_BOTTOM);
+    w_message.SetAlignment(Align_t::CenterBottom());
     w_message.SetPadding({ 0, 2, 0, 2 });
 
     initAndSetIconAndLabel(btn_tune, res_tune);

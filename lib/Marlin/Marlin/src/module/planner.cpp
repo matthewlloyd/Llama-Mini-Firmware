@@ -121,14 +121,16 @@ volatile uint8_t Planner::block_buffer_head,    // Index of the next block to be
                  Planner::block_buffer_nonbusy, // Index of the first non-busy block
                  Planner::block_buffer_planned, // Index of the optimally planned block
                  Planner::block_buffer_tail;    // Index of the busy block, if any
-uint16_t Planner::cleaning_buffer_counter;      // A counter to disable queuing of blocks
 uint8_t Planner::delay_before_delivering;       // This counter delays delivery of blocks when queue becomes empty to allow the opportunity of merging blocks
+
+// A flag to drop queuing of blocks and abort any pending move
+bool Planner::draining_buffer;
 
 planner_settings_t Planner::settings;           // Initialized by settings.load()
 
 uint32_t Planner::max_acceleration_steps_per_s2[XYZE_N]; // (steps/s^2) Derived from mm_per_s2
 
-float Planner::steps_to_mm[XYZE_N];           // (mm) Millimeters per step
+float Planner::mm_per_step[XYZE_N];           // (mm) Millimeters per step
 
 #if DISABLED(CLASSIC_JERK)
   float Planner::junction_deviation_mm;       // (mm) M205 J
@@ -1496,8 +1498,8 @@ void Planner::quick_stop() {
     clear_block_buffer_runtime();
   #endif
 
-  // Make sure to drop any attempt of queuing moves for at least 1 second
-  cleaning_buffer_counter = 1000;
+  // Start draining the planner (requires one full marlin loop to complete!)
+  drain();
 
   // Reenable Stepper ISR
   if (was_enabled) ENABLE_STEPPER_DRIVER_INTERRUPT();
@@ -1512,12 +1514,12 @@ void Planner::endstop_triggered(const AxisEnum axis) {
 }
 
 float Planner::triggered_position_mm(const AxisEnum axis) {
-  return stepper.triggered_position(axis) * steps_to_mm[axis];
+  return stepper.triggered_position(axis) * mm_per_step[axis];
 }
 
 void Planner::finish_and_disable() {
-  while (has_blocks_queued() || cleaning_buffer_counter) idle();
-  disable_all_steppers();
+  while (has_blocks_queued() && !draining_buffer) idle(true);
+  if (!draining_buffer) disable_all_steppers();
 }
 
 /**
@@ -1548,19 +1550,23 @@ float Planner::get_axis_position_mm(const AxisEnum axis) {
   #else
     axis_steps = stepper.position(axis);
   #endif
-  return axis_steps * steps_to_mm[axis];
+  return axis_steps * mm_per_step[axis];
+}
+
+bool Planner::busy() {
+  return !draining_buffer && (
+      has_blocks_queued()
+      #if ENABLED(EXTERNAL_CLOSED_LOOP_CONTROLLER)
+        || (READ(CLOSED_LOOP_ENABLE_PIN) && !READ(CLOSED_LOOP_MOVE_COMPLETE_PIN))
+      #endif
+    );
 }
 
 /**
  * Block until all buffered steps are executed / cleaned
  */
 void Planner::synchronize() {
-  while (
-    has_blocks_queued() || cleaning_buffer_counter
-    #if ENABLED(EXTERNAL_CLOSED_LOOP_CONTROLLER)
-      || (READ(CLOSED_LOOP_ENABLE_PIN) && !READ(CLOSED_LOOP_MOVE_COMPLETE_PIN))
-    #endif
-  ) idle();
+  while (busy()) idle(true);
 }
 
 /**
@@ -1586,12 +1592,10 @@ bool Planner::_buffer_steps(const xyze_long_t &target
   , feedRate_t fr_mm_s, const uint8_t extruder, const float &millimeters
 ) {
 
-  // If we are cleaning, do not accept queuing of movements
-  if (cleaning_buffer_counter) return false;
-
   // Wait for the next available block
   uint8_t next_buffer_head;
   block_t * const block = get_next_free_block(next_buffer_head);
+  if (!block) return false;
 
   // Fill the block with the specified movement
   if (!_populate_block(block, false, target
@@ -1779,32 +1783,32 @@ bool Planner::_populate_block(block_t * const block, bool split_move,
   } delta_mm;
   #if IS_CORE
     #if CORE_IS_XY
-      delta_mm.head.x = da * steps_to_mm[A_AXIS];
-      delta_mm.head.y = db * steps_to_mm[B_AXIS];
-      delta_mm.z      = dc * steps_to_mm[Z_AXIS];
-      delta_mm.a      = (da + db) * steps_to_mm[A_AXIS];
-      delta_mm.b      = CORESIGN(da - db) * steps_to_mm[B_AXIS];
+      delta_mm.head.x = da * mm_per_step[A_AXIS];
+      delta_mm.head.y = db * mm_per_step[B_AXIS];
+      delta_mm.z      = dc * mm_per_step[Z_AXIS];
+      delta_mm.a      = (da + db) * mm_per_step[A_AXIS];
+      delta_mm.b      = CORESIGN(da - db) * mm_per_step[B_AXIS];
     #elif CORE_IS_XZ
-      delta_mm.head.x = da * steps_to_mm[A_AXIS];
-      delta_mm.y      = db * steps_to_mm[Y_AXIS];
-      delta_mm.head.z = dc * steps_to_mm[C_AXIS];
-      delta_mm.a      = (da + dc) * steps_to_mm[A_AXIS];
-      delta_mm.c      = CORESIGN(da - dc) * steps_to_mm[C_AXIS];
+      delta_mm.head.x = da * mm_per_step[A_AXIS];
+      delta_mm.y      = db * mm_per_step[Y_AXIS];
+      delta_mm.head.z = dc * mm_per_step[C_AXIS];
+      delta_mm.a      = (da + dc) * mm_per_step[A_AXIS];
+      delta_mm.c      = CORESIGN(da - dc) * mm_per_step[C_AXIS];
     #elif CORE_IS_YZ
-      delta_mm.x      = da * steps_to_mm[X_AXIS];
-      delta_mm.head.y = db * steps_to_mm[B_AXIS];
-      delta_mm.head.z = dc * steps_to_mm[C_AXIS];
-      delta_mm.b      = (db + dc) * steps_to_mm[B_AXIS];
-      delta_mm.c      = CORESIGN(db - dc) * steps_to_mm[C_AXIS];
+      delta_mm.x      = da * mm_per_step[X_AXIS];
+      delta_mm.head.y = db * mm_per_step[B_AXIS];
+      delta_mm.head.z = dc * mm_per_step[C_AXIS];
+      delta_mm.b      = (db + dc) * mm_per_step[B_AXIS];
+      delta_mm.c      = CORESIGN(db - dc) * mm_per_step[C_AXIS];
     #endif
   #else
-    delta_mm.a = da * steps_to_mm[A_AXIS];
-    delta_mm.b = db * steps_to_mm[B_AXIS];
-    delta_mm.c = dc * steps_to_mm[C_AXIS];
+    delta_mm.a = da * mm_per_step[A_AXIS];
+    delta_mm.b = db * mm_per_step[B_AXIS];
+    delta_mm.c = dc * mm_per_step[C_AXIS];
   #endif
 
   #if EXTRUDERS
-    delta_mm.e = esteps_float * steps_to_mm[E_AXIS_N(extruder)];
+    delta_mm.e = esteps_float * mm_per_step[E_AXIS_N(extruder)];
   #endif
 
   if (block->steps.a < MIN_STEPS_PER_SEGMENT && block->steps.b < MIN_STEPS_PER_SEGMENT && block->steps.c < MIN_STEPS_PER_SEGMENT) {
@@ -2057,7 +2061,7 @@ bool Planner::_populate_block(block_t * const block, bool split_move,
 
   #if ENABLED(SLOWDOWN)
     if (WITHIN(moves_queued, 2, (BLOCK_BUFFER_SIZE) / 2 - 1)) {
-      if (segment_time_us < settings.min_segment_time_us) {
+      if ((segment_time_us < settings.min_segment_time_us) && esteps) {
         // buffer is draining, add extra time.  The amount of time added increases if the buffer is still emptied more.
         const uint32_t nst = segment_time_us + LROUND(2 * (settings.min_segment_time_us - segment_time_us) / moves_queued);
         inverse_secs = 1000000.0f / nst;
@@ -2531,6 +2535,7 @@ void Planner::buffer_sync_block() {
   // Wait for the next available block
   uint8_t next_buffer_head;
   block_t * const block = get_next_free_block(next_buffer_head);
+  if (!block) return;
 
   // Clear block
   memset(block, 0, sizeof(block_t));
@@ -2573,13 +2578,13 @@ bool Planner::buffer_segment(const float &a, const float &b, const float &c, con
   , const feedRate_t &fr_mm_s, const uint8_t extruder, const float &millimeters/*=0.0*/
 ) {
 
-  // If we are cleaning, do not accept queuing of movements
-  if (cleaning_buffer_counter) return false;
+  // If we are aborting, do not accept queuing of movements
+  if (draining_buffer) return false;
 
   // When changing extruders recalculate steps corresponding to the E position
   #if ENABLED(DISTINCT_E_FACTORS)
     if (last_extruder != extruder && settings.axis_steps_per_mm[E_AXIS_N(extruder)] != settings.axis_steps_per_mm[E_AXIS_N(last_extruder)]) {
-      position.e = LROUND(position.e * settings.axis_steps_per_mm[E_AXIS_N(extruder)] * steps_to_mm[E_AXIS_N(last_extruder)]);
+      position.e = LROUND(position.e * settings.axis_steps_per_mm[E_AXIS_N(extruder)] * mm_per_step[E_AXIS_N(last_extruder)]);
       last_extruder = extruder;
     }
   #endif
@@ -2803,9 +2808,9 @@ void Planner::reset_acceleration_rates() {
   #endif
 }
 
-// Recalculate position, steps_to_mm if settings.axis_steps_per_mm changes!
+// Recalculate position, mm_per_step if settings.axis_steps_per_mm changes!
 void Planner::refresh_positioning() {
-  LOOP_XYZE_N(i) steps_to_mm[i] = 1.0f / settings.axis_steps_per_mm[i];
+  LOOP_XYZE_N(i) mm_per_step[i] = 1.0f / settings.axis_steps_per_mm[i];
   set_position_mm(current_position);
   reset_acceleration_rates();
 }

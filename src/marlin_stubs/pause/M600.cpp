@@ -20,11 +20,10 @@
  *
  */
 
-#include "../../../lib/Marlin/Marlin/src/inc/MarlinConfig.h"
+#include "config_features.h"
 
 // clang-format off
 #if (!ENABLED(ADVANCED_PAUSE_FEATURE)) || \
-    EXTRUDERS > 1 || \
     HAS_LCD_MENU || \
     ENABLED(MMU2_MENUS) || \
     ENABLED(MIXING_EXTRUDER) || \
@@ -40,6 +39,8 @@
 #include "marlin_server.hpp"
 #include "pause_stubbed.hpp"
 #include <cmath>
+#include "filament_sensor_api.hpp"
+#include "filament.hpp"
 
 /**
  * M600: Pause for filament change
@@ -83,16 +84,18 @@ void GcodeSuite::M600() {
 #endif
 
     park_point.z += current_position.z;
-    Pause &pause = Pause::Instance();
+    static const xyze_float_t no_return = { NAN, NAN, NAN, current_position.e };
 
-    //NAN == default
-    pause.SetUnloadLength(parser.seen('U') ? parser.value_axis_units(E_AXIS) : NAN);
-    pause.SetSlowLoadLength(NAN);
-    pause.SetFastLoadLength(parser.seen('L') ? parser.value_axis_units(E_AXIS) : NAN);
-    pause.SetPurgeLength(NAN);
-    pause.SetParkPoint(park_point);
-    pause.SetResumePoint(current_position);
-    pause.SetRetractLength(std::abs(parser.seen('E') ? parser.value_axis_units(E_AXIS) : NAN)); // Initial retract before move to filament change position
+    pause::Settings settings;
+    settings.SetParkPoint(park_point);
+    settings.SetResumePoint(parser.seen('N') ? no_return : current_position);
+    if (parser.seen('U'))
+        settings.SetUnloadLength(parser.value_axis_units(E_AXIS));
+    if (parser.seen('L'))
+        settings.SetFastLoadLength(parser.value_axis_units(E_AXIS));
+    if (parser.seen('E')) {
+        settings.SetRetractLength(std::abs(parser.value_axis_units(E_AXIS)));
+    } // Initial retract before move to filament change position
 
     float disp_temp = marlin_server_get_temp_to_display();
     float targ_temp = Temperature::degTargetHotend(target_extruder);
@@ -101,7 +104,9 @@ void GcodeSuite::M600() {
         thermalManager.setTargetHotend(disp_temp, target_extruder);
     }
 
-    pause.FilamentChange();
+    Filaments::SetToBeLoaded(Filaments::CurrentIndex());
+    Pause::Instance().FilamentChange(settings);
+    FSensors_instance().ClrM600Sent(); //reset filament sensor M600 sent flag
 
     if (disp_temp > targ_temp) {
         thermalManager.setTargetHotend(targ_temp, target_extruder);

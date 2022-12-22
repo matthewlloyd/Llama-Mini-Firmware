@@ -623,7 +623,7 @@ class Temperature {
       }
 
       #if HAS_TEMP_HOTEND
-        static bool wait_for_hotend(const uint8_t target_extruder, const bool no_wait_for_cooling=true
+        static bool wait_for_hotend(const uint8_t target_extruder, const bool no_wait_for_cooling=true, bool fan_cooling=false
           #if G26_CLICK_CAN_CANCEL
             , const bool click_to_cancel=false
           #endif
@@ -805,6 +805,15 @@ public:
       static void set_heating_message(const uint8_t e);
     #endif
 
+    #if ENABLED(MODEL_DETECT_STUCK_THERMISTOR)
+      static bool saneTempReadingHotend(const uint8_t E_NAME) {
+          if (failed_cycles[HOTEND_INDEX] > THERMAL_PROTECTION_MODEL_PERIOD) return false;
+          else return true;
+      }
+    #else
+      static bool saneTempReadingHotend(const uint8_t){return true;}
+    #endif
+
   private:
     static void set_current_temp_raw();
     static void updateTemperaturesFromRawValues();
@@ -830,7 +839,12 @@ public:
 
     static void checkExtruderAutoFans();
 
-    static float get_pid_output_hotend(const uint8_t e);
+    static float get_pid_output_hotend(
+#if ENABLED(MODEL_DETECT_STUCK_THERMISTOR)
+            float &feed_forward ,
+#endif
+            const uint8_t e
+      );
     static float get_model_output_hotend(float &last_target, float &expected, const uint8_t e);
 
     #if ENABLED(PIDTEMPBED)
@@ -866,8 +880,15 @@ public:
         static tr_state_machine_t tr_state_machine_chamber;
       #endif
 
+
       static void thermal_runaway_protection(tr_state_machine_t &state, const float &current, const float &target, const heater_ind_t heater_id, const uint16_t period_seconds, const uint16_t hysteresis_degc);
 
+      #if ENABLED(MODEL_DETECT_STUCK_THERMISTOR)
+        static int_least8_t failed_cycles[HOTENDS];
+        static constexpr int_least8_t self_healing_cycles = 10;
+        static_assert((THERMAL_PROTECTION_MODEL_PERIOD + self_healing_cycles) < INT_LEAST8_MAX, "THERMAL_PROTECTION_MODEL_PERIOD doesn't fit int_least8_t.");
+        static void thermal_model_protection(const float &pid_output, const float &feed_forward, const uint8_t e);
+      #endif
     #endif // HAS_THERMAL_PROTECTION
 };
 

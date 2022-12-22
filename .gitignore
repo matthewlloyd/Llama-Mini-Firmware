@@ -6,6 +6,7 @@
 .dependencies
 .DS_Store
 /CMakeLists.txt.user
+CMakeUserPresets.json
 .ccls-cache
 .idea
 compile_commands.json
@@ -13,3 +14,5 @@ compile_commands.json
 /.vscode/*.registers.state.json
 Makefile
 /doc/html/
+__pycache__
+.benchmarks

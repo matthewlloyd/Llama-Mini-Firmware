@@ -1,31 +1,40 @@
 // marlin_server.hpp
 #pragma once
 
+#include <optional>
+#include <atomic>
+
 #include "marlin_server.h"
 #include "client_response.hpp"
+#include "fsm_types.hpp"
+#include "fsm_progress_type.hpp"
 
 /*****************************************************************************/
 //C++ only features
 
 //todo ensure signature match
-//notify all clients to create finit statemachine, must match fsm_create_t signature
+//notify all clients to create finite statemachine
 void fsm_create(ClientFSM type, uint8_t data = 0);
-//notify all clients to destroy finit statemachine, must match fsm_destroy_t signature
+//notify all clients to destroy finite statemachine, must match fsm_destroy_t signature
 void fsm_destroy(ClientFSM type);
-//notify all clients to change state of finit statemachine, must match fsm_change_t signature
+//notify all clients to change state of finite statemachine, must match fsm_change_t signature
 //can be called inside while, notification is send only when is different from previous one
-void _fsm_change(ClientFSM type, uint8_t phase, uint8_t progress_tot, uint8_t progress);
+void _fsm_change(ClientFSM type, fsm::BaseData data);
 
 template <class T>
-void fsm_change(ClientFSM type, T phase, uint8_t progress_tot, uint8_t progress) {
-    _fsm_change(type, GetPhaseIndex(phase), progress_tot, progress);
+void fsm_change(ClientFSM type, T phase, fsm::PhaseData data) {
+    _fsm_change(type, fsm::BaseData(GetPhaseIndex(phase), data));
 }
+
+// user can stop waiting for heating/cooling by pressing a button
+bool can_stop_wait_for_heatup();
+void can_stop_wait_for_heatup(bool val);
 
 //inherited class for server side to be able to work with server_side_encoded_response
 class ClientResponseHandler : public ClientResponses {
     ClientResponseHandler() = delete;
     ClientResponseHandler(ClientResponseHandler &) = delete;
-    static uint32_t server_side_encoded_response;
+    static std::atomic<uint32_t> server_side_encoded_response;
 
 public:
     //call inside marlin server on received response from client
@@ -33,14 +42,16 @@ public:
         server_side_encoded_response = encoded_bt;
     }
     //return response and erase it
-    //return -1 if button does not match
+    //return UINT32_MAX if button does not match
+    //can be used from sub thread, as long as only one thread at the time reads it
     template <class T>
     static Response GetResponseFromPhase(T phase) {
-        uint32_t _phase = server_side_encoded_response >> RESPONSE_BITS;
+        const uint32_t value = server_side_encoded_response.exchange(UINT32_MAX); //read and erase response
+
+        uint32_t _phase = value >> RESPONSE_BITS;
         if ((static_cast<uint32_t>(phase)) != _phase)
             return Response::_none;
-        uint32_t index = server_side_encoded_response & uint32_t(MAX_RESPONSES - 1); //get response index
-        server_side_encoded_response = -1;                                           //erase response
+        uint32_t index = value & uint32_t(MAX_RESPONSES - 1); //get response index
         return GetResponse(phase, index);
     }
 };
@@ -54,13 +65,12 @@ class FSM_notifier {
         float offset = 0; //offset from lowest value
         uint8_t progress_min = 0;
         uint8_t progress_max = 100;
-        uint8_t var_id;
-        uint8_t last_progress_sent;
+        marlin_var_id_t var_id;
+        std::optional<uint8_t> last_progress_sent;
         data()
             : type(ClientFSM::_none)
             , phase(0)
-            , var_id(0)
-            , last_progress_sent(-1) {}
+            , var_id(static_cast<marlin_var_id_t>(0)) {}
     };
     //static members
     //there can be only one active instance of FSM_notifier, which use this data
@@ -73,7 +83,7 @@ class FSM_notifier {
 
 protected:
     //protected ctor so this instance cannot be created
-    FSM_notifier(ClientFSM type, uint8_t phase, variant8_t min, variant8_t max, uint8_t progress_min, uint8_t progress_max, uint8_t var_id);
+    FSM_notifier(ClientFSM type, uint8_t phase, variant8_t min, variant8_t max, uint8_t progress_min, uint8_t progress_max, marlin_var_id_t var_id);
     FSM_notifier(const FSM_notifier &) = delete;
     virtual void preSendNotification() {}
     virtual void postSendNotification() {}
@@ -84,14 +94,14 @@ public:
 };
 
 //template used by using statement
-template <int VAR_ID, class T>
+template <marlin_var_id_t VAR_ID, class T>
 class Notifier : public FSM_notifier {
 public:
     Notifier(ClientFSM type, uint8_t phase, T min, T max, uint8_t progress_min, uint8_t progress_max) {};
     //        : FSM_notifier(type, phase, min, max, progress_min, progress_max, VAR_ID) {}
 };
 
-template <int VAR_ID>
+template <marlin_var_id_t VAR_ID>
 class Notifier<VAR_ID, float> : public FSM_notifier {
 public:
     Notifier(ClientFSM type, uint8_t phase, float min, float max, uint8_t progress_min, uint8_t progress_max)
@@ -136,8 +146,14 @@ public:
     }
 
     template <class T>
-    void Change(T phase, uint8_t progress_tot, uint8_t progress) const {
-        fsm_change(dialog, phase, progress_tot, progress);
+    void Change(T phase, uint8_t progress) const {
+        ProgressSerializer serializer(progress);
+        fsm_change(dialog, phase, serializer.Serialize());
+    }
+
+    template <class T, class U>
+    void Change(T phase, const U &serializer) const {
+        fsm_change(dialog, phase, serializer.Serialize());
     }
 
     ~FSM_Holder() {
@@ -148,3 +164,6 @@ public:
 uint8_t get_var_sd_percent_done();
 void set_var_sd_percent_done(uint8_t value);
 void set_warning(WarningType type);
+
+//directly access marlin server variables
+const marlin_vars_t &marlin_server_read_vars();

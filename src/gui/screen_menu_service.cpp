@@ -5,7 +5,6 @@
 #include "screen_menu.hpp"
 #include "stm32f4xx_hal.h"
 #include "sys.h"
-#include "dbg.h"
 #include "bsod.h"
 #include "eeprom.h"
 /*
@@ -158,7 +157,7 @@ screen_t screen_menu_service = {
 #include "screen_menu.hpp"
 #include "WindowMenuItems.hpp"
 
-using Screen = ScreenMenu<EHeader::Off, EFooter::On, HelpLines_None, MI_RETURN, MI_TEST_DISABLED_RETURN>;
+using Screen = ScreenMenu<EFooter::On, MI_RETURN, MI_TEST_DISABLED_RETURN>;
 /*
 static void init(screen_t *screen) {
     Screen::Create(screen);

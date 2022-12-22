@@ -2,11 +2,12 @@
 #include <stdbool.h>
 #include <algorithm>
 #include "thread_measurement.h"
+#include "print_processor.hpp"
 #include "cmsis_os.h" //osDelay
-#include "filament_sensor.hpp"
+#include "filament_sensor_api.hpp"
 #include "marlin_client.h"
 #include "trinamic.h"
-#include "stm32f4xx_hal.h"
+#include "timing.h"
 
 static inline bool checkTimestampsAscendingOrder(uint32_t a, uint32_t b) {
     uint32_t u = (b - a);
@@ -16,19 +17,19 @@ static inline bool checkTimestampsAscendingOrder(uint32_t a, uint32_t b) {
 void StartMeasurementTask(void const *argument) {
     marlin_client_init();
     marlin_client_wait_for_start_processing();
-    fs_init_on_edge();
     marlin_client_set_event_notify(MARLIN_EVT_MSK_FSM, nullptr);
+    PrintProcessor::Init(); // this cannot be inside filament sensor ctor, because it can be created in any thread (outside them)
 
-    uint32_t next_fs_cycle = HAL_GetTick();
-    uint32_t next_sg_cycle = HAL_GetTick();
+    uint32_t next_fs_cycle = ticks_ms();
+    uint32_t next_sg_cycle = ticks_ms();
 
     for (;;) {
         marlin_client_loop();
-        uint32_t now = HAL_GetTick();
+        uint32_t now = ticks_ms();
 
         // sample filament sensor
         if (checkTimestampsAscendingOrder(next_fs_cycle, now)) {
-            fs_cycle();
+            FSensors_instance().Cycle();
             // call fs_cycle every ~50 ms
             next_fs_cycle = now + 50;
         }

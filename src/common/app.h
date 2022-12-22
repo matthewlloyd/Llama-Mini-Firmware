@@ -7,8 +7,8 @@
 
     #include "fanctl.h"
 
-extern CFanCtl fanctl0;
-extern CFanCtl fanctl1;
+extern CFanCtl fanCtlPrint;
+extern CFanCtl fanCtlHeatBreak;
 
 extern "C" {
 
@@ -21,8 +21,6 @@ extern void app_run(void);
 extern void app_error(void);
 
 extern void app_assert(uint8_t *file, uint32_t line);
-
-extern void app_cdc_rx(uint8_t *buffer, uint32_t length);
 
 extern void app_tim6_tick(void);
 

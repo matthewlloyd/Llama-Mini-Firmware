@@ -81,57 +81,36 @@ Rect16::Rect16(point_i16_t top_left, size_ui16_t s)
 }
 
 Rect16 Rect16::Intersection(Rect16 const &r) const {
-    if (IsEmpty() || r.IsEmpty())
-        return Rect16(0, 0, 0, 0);
     point_i16_t top_left;
     point_i16_t bot_right;
 
-    // If one Rect16 is on left side of other
-    if (TopLeft().x > r.BottomRight().x
-        || r.TopLeft().x > BottomRight().x)
-        return Rect16();
-    else {
-        top_left.x = TopLeft().x > r.TopLeft().x
-            ? TopLeft().x
-            : r.TopLeft().x;
-        bot_right.x = BottomRight().x < r.BottomRight().x
-            ? BottomRight().x
-            : r.BottomRight().x;
-    }
+    top_left.x = std::max(TopLeft().x, r.TopLeft().x);
+    top_left.y = std::max(TopLeft().y, r.TopLeft().y);
+    bot_right.x = std::min(BottomRight().x, r.BottomRight().x);
+    bot_right.y = std::min(BottomRight().y, r.BottomRight().y);
 
-    // If one Rect16 is above other
-    if (TopLeft().y > r.BottomRight().y
-        || r.TopLeft().y > BottomRight().y)
+    if (top_left.x > bot_right.x || top_left.y > bot_right.y)
         return Rect16();
-    else {
-        top_left.y = TopLeft().y > r.TopLeft().y
-            ? TopLeft().y
-            : r.TopLeft().y;
-        bot_right.y = BottomRight().y < r.BottomRight().y
-            ? BottomRight().y
-            : r.BottomRight().y;
-    }
     return Rect16 { top_left, bot_right };
 }
 
-Rect16 Rect16::Union(Rect16 const &r) const {
-    point_i16_t top_left;
-    point_i16_t bot_right;
+Rect16 &Rect16::operator+=(Rect16 rhs) {
+    // this is empty, rhs is not .. just replace this with rhs
+    if ((this->IsEmpty()) && (!rhs.IsEmpty())) {
+        *this = rhs;
+    }
 
-    top_left.x = TopLeft().x < r.TopLeft().x
-        ? TopLeft().x
-        : r.TopLeft().x;
-    bot_right.x = BottomRight().x > r.BottomRight().x
-        ? BottomRight().x
-        : r.BottomRight().x;
-    top_left.y = TopLeft().y < r.TopLeft().y
-        ? TopLeft().y
-        : r.TopLeft().y;
-    bot_right.y = BottomRight().y > r.BottomRight().y
-        ? BottomRight().y
-        : r.BottomRight().y;
+    if ((!this->IsEmpty()) && (!rhs.IsEmpty())) {
+        int16_t max_x = std::max(EndPoint().x, rhs.EndPoint().x);
+        int16_t max_y = std::max(EndPoint().y, rhs.EndPoint().y);
 
-    return Rect16 { top_left, bot_right };
+        top_left_.x = std::min(top_left_.x, rhs.TopLeft().x);
+        top_left_.y = std::min(top_left_.y, rhs.TopLeft().y);
+        width_ = uint16_t(max_x - top_left_.x);
+        height_ = uint16_t(max_y - top_left_.y);
+    }
+
+    return *this;
 }
 
 bool Rect16::HasIntersection(Rect16 const &r) const {
@@ -149,33 +128,33 @@ bool Rect16::Contain(Rect16 const &r) const {
     return Contain(r.TopLeft()) && Contain(r.BottomRight());
 }
 
-void Rect16::Align(Rect16 rc, uint8_t align) {
-    switch (align & ALIGN_HMASK) {
-    case ALIGN_LEFT:
+void Rect16::Align(Rect16 rc, Align_t align) {
+    switch (align.Horizontal()) {
+    case Align_t::horizontal::left:
         top_left_.x = rc.Left();
         break;
-    case ALIGN_RIGHT:
+    case Align_t::horizontal::right:
         top_left_.x = rc.Left() + rc.Width() - width_;
         break;
-    case ALIGN_HCENTER:
+    case Align_t::horizontal::center:
         top_left_.x = rc.Left() + (rc.Width() - width_) / 2;
         break;
     }
 
-    switch (align & ALIGN_VMASK) {
-    case ALIGN_TOP:
+    switch (align.Vertical()) {
+    case Align_t::vertical::top:
         top_left_.y = rc.Top();
         break;
-    case ALIGN_BOTTOM:
+    case Align_t::vertical::bottom:
         top_left_.y = rc.Top() + rc.Height() - height_;
         break;
-    case ALIGN_VCENTER:
+    case Align_t::vertical::center:
         top_left_.y = rc.Top() + (rc.Height() - height_) / 2;
         break;
     }
 }
 
-void Rect16::HorizontalSplit(Rect16 splits[], Rect16 spaces[], const size_t count, const uint16_t spacing, uint8_t ratio[]) const {
+void Rect16::HorizontalSplit(Rect16 splits[], Rect16 spaces[], const size_t count, const uint16_t spacing, uint8_t text_width[]) const {
     if (count == 0)
         return;
     if (count == 1) {
@@ -183,17 +162,22 @@ void Rect16::HorizontalSplit(Rect16 splits[], Rect16 spaces[], const size_t coun
         return;
     }
 
-    size_t index, ratio_sum = 0;
+    size_t index;
     const uint16_t usable_width = Width() - (spacing * (count - 1));
     uint16_t width = usable_width / count;
     uint16_t final_width = 0;
-    if (ratio != nullptr) {
-        ratio_sum = std::accumulate(ratio, ratio + count, ratio_sum);
+    int space_in_btn;
+    if (text_width != nullptr) {
+        int text_sum = std::accumulate(text_width, text_width + count, 0);
+        if (text_sum > usable_width)
+            text_sum = usable_width;
+        /// unused space around text will be the same in all buttons
+        space_in_btn = (usable_width - text_sum) / count;
     }
+
     for (index = 0; index < count; index++) {
-        if (ratio != nullptr) {
-            width = usable_width * ((float)ratio[index] / (float)ratio_sum) + .5F;
-        }
+        if (text_width != nullptr)
+            width = text_width[index] + space_in_btn;
         const int16_t left = index == 0 ? (int16_t)Left() : splits[index - 1].EndPoint().x + spacing;
         /// rect split
         splits[index] = Rect16({ left, Top() }, width, Height());
@@ -204,12 +188,13 @@ void Rect16::HorizontalSplit(Rect16 splits[], Rect16 spaces[], const size_t coun
             final_width += spacing;
         }
     }
-    /// add not used pixels due to rounding to the last split width
+    /// add not used pixels due to rounding to the middle split width
     if (final_width < Width()) {
-        splits[count - 1].width_ += Width() - final_width;
+        splits[count / 2].width_ += Width() - final_width;
     }
 }
 
+/// TODO: this is not used, should share the code with HorizontalSplit
 void Rect16::VerticalSplit(Rect16 splits[], Rect16 spaces[], const size_t count, const uint16_t spacing, uint8_t ratio[]) const {
     if (count == 0)
         return;
@@ -245,6 +230,57 @@ void Rect16::VerticalSplit(Rect16 splits[], Rect16 spaces[], const size_t count,
     }
 }
 
+size_t Rect16::HorizontalSplit(Rect16 splits[], Width_t widths[], size_t count) const {
+    if (count == 0)
+        return 0;
+    if (IsEmpty())
+        return 0; // nothing can fit in this rectangle
+
+    size_t used_count = 0;
+    Width_t width_sum = Width_t(0);
+    const Width_t width_max = Width();
+
+    //calculate used width and used used_count of rectangles
+    for (; used_count < count; ++used_count) {
+        if (width_sum + widths[used_count] <= width_max) {
+            // next rect fits
+            width_sum = width_sum + widths[used_count];
+        } else {
+            // next rect does not fit
+            break;
+        }
+    }
+
+    horizontalSplit(splits, widths, used_count, width_sum, *this);
+    return used_count;
+}
+
+void Rect16::horizontalSplit(Rect16 *splits, Width_t *widths, size_t count, Width_t width_sum, Rect16 rect) {
+    //no checks, checks are in HorizontalSplit
+
+    Rect16 first = rect;
+    first = widths[0]; // width of first rect
+    (*splits) = first;
+
+    if (count > 1) {
+        Width_t width_sum_spaces = rect.Width() - width_sum;
+        Width_t width_space = width_sum_spaces / (count - 1);
+        Width_t width_diff = width_space + widths[0]; // new rec will be this smaller
+
+        //recalculate for recursive call
+        rect -= width_diff;         //rect is smaller
+        rect += Left_t(width_diff); //and cut from left side
+        width_sum = width_sum - widths[0];
+        --count;
+        widths++; //skip first
+        splits++; //skip first
+
+        //recursive call
+        horizontalSplit(splits, widths, count, width_sum, rect);
+        return;
+    }
+}
+
 Rect16 Rect16::LeftSubrect(Rect16 subtrahend) {
     Rect16 ret = *this;
     if (subtrahend.Left() < Left()) {
@@ -271,5 +307,17 @@ Rect16 Rect16::RightSubrect(Rect16 subtrahend) {
     ret = Left_t(subtrahend.Left() + subtrahend.Width());
     ret -= Width_t(subtrahend.Left() - Left());
     ret -= subtrahend.Width();
+    return ret;
+}
+
+Rect16 Rect16::merge(const Rect16 *rectangles, size_t count) {
+    // this is private method called by public one(s)
+    // public method must not set count == 0
+    // public method is a template one and count is checked at compile time
+    Rect16 ret = rectangles[0];
+
+    for (size_t i = 1; i < count; ++i) {
+        ret += rectangles[i];
+    }
     return ret;
 }

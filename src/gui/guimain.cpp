@@ -1,10 +1,11 @@
-//guimain.cpp
-
+#include <feature/bootloader.h>
+#include <feature/resources.h>
 #include <stdio.h>
-#include "stm32f4xx_hal.h"
+#include "gui_time.hpp"
 #include "gui.hpp"
 #include "config.h"
 #include "marlin_client.h"
+#include "display.h"
 
 #include "ScreenHandler.hpp"
 #include "ScreenFactory.hpp"
@@ -23,9 +24,21 @@
 #include "IScreenPrinting.hpp"
 #include "DialogHandler.hpp"
 #include "sound.hpp"
+#include "knob_event.hpp"
+#include "DialogMoveZ.hpp"
+#include "ScreenShot.hpp"
 #include "i18n.h"
 #include "eeprom.h"
 #include "w25x.h"
+#include "gui_fsensor_api.hpp"
+
+#if ENABLED(RESOURCES)
+    #include "resources/bootstrap.hpp"
+    #include "resources/revision_standard.hpp"
+#endif
+#if BOTH(RESOURCES, BOOTLOADER)
+    #include "bootloader/bootloader.hpp"
+#endif
 
 extern int HAL_IWDG_Reset;
 
@@ -34,33 +47,27 @@ int guimain_spi_test = 0;
 #include "gpio.h"
 #include "Jogwheel.hpp"
 #include "hwio.h"
-#include "diag.h"
 #include "sys.h"
-#include "dbg.h"
 #include "wdt.h"
 #include "dump.h"
 #include "gui_media_events.hpp"
-
+#include "main.h"
+#include "bsod.h"
 extern void blockISR(); // do not want to include marlin temperature
 
+#ifdef USE_ST7789
 const st7789v_config_t st7789v_cfg = {
     &hspi2,             // spi handle pointer
     ST7789V_FLG_DMA,    // flags (DMA, MISO)
     ST7789V_DEF_COLMOD, // interface pixel format (5-6-5, hi-color)
     ST7789V_DEF_MADCTL, // memory data access control (no mirror XY)
 };
+#endif // USE_ST7789
 
 marlin_vars_t *gui_marlin_vars = 0;
 
-void update_firmware_screen(void);
-
-static void _gui_loop_cb() {
-    marlin_client_loop();
-    GuiMediaEventsHandler::Tick();
-}
-
-char gui_media_LFN[FILE_NAME_MAX_LEN + 1];
-char gui_media_SFN_path[FILE_PATH_MAX_LEN + 1];
+char gui_media_LFN[FILE_NAME_BUFFER_LEN];
+char gui_media_SFN_path[FILE_PATH_BUFFER_LEN];
 
 #ifdef GUI_JOGWHEEL_SUPPORT
 Jogwheel jogwheel;
@@ -91,6 +98,9 @@ void Warning_cb(WarningType type) {
     case WarningType::PrintFanError:
         window_dlg_strong_warning_t::ShowPrintFan();
         break;
+    case WarningType::HotendTempDiscrepancy:
+        window_dlg_strong_warning_t::ShowHotendTempDiscrepancy();
+        break;
     case WarningType::HeatersTimeout:
     case WarningType::NozzleTimeout:
         window_dlg_strong_warning_t::ShowHeatersTimeout();
@@ -107,23 +117,80 @@ static void Startup_cb(void) {
 }
 
 void client_gui_refresh() {
-    static uint32_t start = HAL_GetTick();
-    static uint32_t last_tick = HAL_GetTick();
-    uint32_t tick = HAL_GetTick();
+    static uint32_t start = gui::GetTick_ForceActualization();
+    static uint32_t last_tick = gui::GetTick_ForceActualization();
+    uint32_t tick = gui::GetTick_ForceActualization();
     if (last_tick != tick) {
-        uint32_t percent = (tick - start) / (3000 / 100); //3000ms / 100%
+        unsigned percent = (tick - start) / (3000 / 100); //3000ms / 100%
         percent = ((percent < 99) ? percent : 99);
-        Screens::Access()->WindowEvent(GUI_event_t::GUI_STARTUP, (void *)percent);
+
+        GUIStartupProgress progr = { unsigned(percent), nullptr };
+        event_conversion_union un;
+        un.pGUIStartupProgress = &progr;
+        Screens::Access()->WindowEvent(GUI_event_t::GUI_STARTUP, un.pvoid);
+
         last_tick = tick;
         gui_redraw();
     }
 }
 
-void gui_run(void) {
-    if (diag_fastboot)
-        return;
+#if ENABLED(RESOURCES)
+static void finish_update() {
 
+    #if ENABLED(BOOTLOADER)
+    if (buddy::bootloader::needs_update()) {
+        buddy::bootloader::update(
+            [](int percent_done, buddy::bootloader::UpdateStage stage) {
+                const char *stage_description;
+                switch (stage) {
+                case buddy::bootloader::UpdateStage::LookingForBbf:
+                    stage_description = "Looking for BBF...";
+                    break;
+                case buddy::bootloader::UpdateStage::PreparingUpdate:
+                case buddy::bootloader::UpdateStage::Updating:
+                    stage_description = "Updating bootloader";
+                    break;
+                default:
+                    bsod("unreachable");
+                }
+
+                _log_event(LOG_SEVERITY_INFO, log_component_find("Buddy"), "Bootloader update progress %s (%i %%)", stage_description, percent_done);
+                screen_splash_data_t::bootstrap_cb(percent_done, stage_description);
+                gui_redraw();
+            });
+    }
+    #endif
+
+    if (!buddy::resources::has_resources(buddy::resources::revision::standard)) {
+        buddy::resources::bootstrap(
+            buddy::resources::revision::standard, [](int percent_done, buddy::resources::BootstrapStage stage) {
+                const char *stage_description;
+                switch (stage) {
+                case buddy::resources::BootstrapStage::LookingForBbf:
+                    stage_description = "Looking for BBF...";
+                    break;
+                case buddy::resources::BootstrapStage::PreparingBootstrap:
+                    stage_description = "Preparing bootstrap";
+                    break;
+                case buddy::resources::BootstrapStage::CopyingFiles:
+                    stage_description = "Installing files";
+                    break;
+                default:
+                    bsod("unreachable");
+                }
+
+                _log_event(LOG_SEVERITY_INFO, log_component_find("Buddy"), "Bootstrap progress %s (%i %%)", stage_description, percent_done);
+                screen_splash_data_t::bootstrap_cb(percent_done, stage_description);
+                gui_redraw();
+            });
+    }
+}
+#endif
+
+void gui_run(void) {
+#ifdef USE_ST7789
     st7789v_config = st7789v_cfg;
+#endif
 
     gui_init();
 
@@ -143,54 +210,50 @@ void gui_run(void) {
     GuiDefaults::FontBig = resource_font(IDR_FNT_BIG);
     GuiDefaults::FontMenuItems = resource_font(IDR_FNT_NORMAL);
     GuiDefaults::FontMenuSpecial = resource_font(IDR_FNT_SPECIAL);
-
-    if (!sys_fw_is_valid())
-        update_firmware_screen();
+    GuiDefaults::FooterFont = resource_font(IDR_FNT_SPECIAL);
 
     gui_marlin_vars = marlin_client_init();
     gui_marlin_vars->media_LFN = gui_media_LFN;
     gui_marlin_vars->media_SFN_path = gui_media_SFN_path;
 
     DialogHandler::Access(); //to create class NOW, not at first call of one of callback
-    marlin_client_set_fsm_create_cb(DialogHandler::Open);
-    marlin_client_set_fsm_destroy_cb(DialogHandler::Close);
-    marlin_client_set_fsm_change_cb(DialogHandler::Change);
+    marlin_client_set_fsm_cb(DialogHandler::Command);
     marlin_client_set_message_cb(MsgCircleBuffer_cb);
     marlin_client_set_warning_cb(Warning_cb);
     marlin_client_set_startup_cb(Startup_cb);
 
     Sound_Play(eSOUND_TYPE::Start);
 
+    gui::knob::RegisterHeldLeftAction(TakeAScreenshot);
+    gui::knob::RegisterLongPressScreenAction(DialogMoveZ::Show);
+
     ScreenFactory::Creator error_screen = nullptr;
-    if (w25x_init()) {
-        if (dump_in_xflash_is_valid() && !dump_in_xflash_is_displayed()) {
-            blockISR(); //TODO delete blockISR() on this line to enable start after click
-            switch (dump_in_xflash_get_type()) {
-            case DUMP_HARDFAULT:
-                error_screen = ScreenFactory::Screen<screen_hardfault_data_t>;
-                break;
-            case DUMP_TEMPERROR:
-                //TODO uncomment to enable start after click
-                //blockISR();
-                error_screen = ScreenFactory::Screen<screen_temperror_data_t>;
-                break;
+
+    if (dump_in_xflash_is_valid() && !dump_in_xflash_is_displayed()) {
+        blockISR(); //TODO delete blockISR() on this line to enable start after click
+        switch (dump_in_xflash_get_type()) {
+        case DUMP_HARDFAULT:
+            error_screen = ScreenFactory::Screen<screen_hardfault_data_t>;
+            break;
+        case DUMP_TEMPERROR:
+            //TODO uncomment to enable start after click
+            //blockISR();
+            error_screen = ScreenFactory::Screen<screen_temperror_data_t>;
+            break;
 #ifndef _DEBUG
-            case DUMP_IWDGW:
-                error_screen = ScreenFactory::Screen<screen_watchdog_data_t>;
-                break;
+        case DUMP_IWDGW:
+            error_screen = ScreenFactory::Screen<screen_watchdog_data_t>;
+            break;
 #endif
-            }
-            dump_in_xflash_set_displayed();
         }
-    } else {
-        //TODO: hardware error
+        dump_in_xflash_set_displayed();
     }
 
 #ifndef _DEBUG
 //        HAL_IWDG_Reset ? ScreenFactory::Screen<screen_watchdog_data_t> : nullptr, // wdt
 #endif
 
-    ScreenFactory::Creator screen_initializer[] {
+    screen_node screen_initializer[] {
         error_screen,
         ScreenFactory::Screen<screen_splash_data_t>, // splash
         ScreenFactory::Screen<screen_home_data_t>    // home
@@ -199,40 +262,48 @@ void gui_run(void) {
     //Screens::Init(ScreenFactory::Screen<screen_splash_data_t>);
     Screens::Init(screen_initializer, screen_initializer + (sizeof(screen_initializer) / sizeof(screen_initializer[0])));
 
-    //TIMEOUT variable getting value from EEPROM when EEPROM interface is inicialized
-    if (variant_get_ui8(eeprom_get_var(EEVAR_MENU_TIMEOUT)) != 0) {
+    //TIMEOUT variable getting value from EEPROM when EEPROM interface is initialized
+    if (eeprom_get_bool(EEVAR_MENU_TIMEOUT)) {
         Screens::Access()->EnableMenuTimeout();
     } else {
         Screens::Access()->DisableMenuTimeout();
     }
-    //set loop callback (will be called every time inside gui_loop)
-    gui_loop_cb = _gui_loop_cb;
 
     Screens::Access()->Loop();
 
+#if ENABLED(RESOURCES)
+    finish_update();
+#endif
+
     marlin_client_set_event_notify(MARLIN_EVT_MSK_DEF, client_gui_refresh);
     marlin_client_set_change_notify(MARLIN_VAR_MSK_DEF, client_gui_refresh);
-    uint32_t progr100 = 100;
-    Screens::Access()->WindowEvent(GUI_event_t::GUI_STARTUP, (void *)progr100);
-    while (1) {
-        Screens::Access()->Loop();
-        gui_loop();
-    }
-}
 
-void update_firmware_screen(void) {
-    font_t *font = resource_font(IDR_FNT_SPECIAL);
-    font_t *font1 = resource_font(IDR_FNT_NORMAL);
-    display::Clear(COLOR_BLACK);
-    render_icon_align(Rect16(70, 20, 100, 100), IDR_PNG_pepa_64px, COLOR_BLACK, RENDER_FLG(ALIGN_CENTER, 0));
-    display::DrawText(Rect16(10, 115, 240, 60), _("Hi, this is your\nOriginal Prusa MINI."), font, COLOR_BLACK, COLOR_WHITE);
-    display::DrawText(Rect16(10, 160, 240, 80), _("Please insert the USB\ndrive that came with\nyour MINI and reset\nthe printer to flash\nthe firmware"), font, COLOR_BLACK, COLOR_WHITE);
-    render_text_align(Rect16(5, 250, 230, 40), _("RESET PRINTER"), font1, COLOR_ORANGE, COLOR_WHITE, { 2, 6, 2, 2 }, ALIGN_CENTER);
-    BtnState_t btn_ev;
+    GUIStartupProgress progr = { 100, std::nullopt };
+    event_conversion_union un;
+    un.pGUIStartupProgress = &progr;
+    Screens::Access()->WindowEvent(GUI_event_t::GUI_STARTUP, un.pvoid);
+
+    gui::fsensor::validate_for_cyclical_calls();
+
+    redraw_cmd_t redraw;
+
+    marlin_gcode("M118 E1 bootstrap finished");
+    //TODO make some kind of registration
     while (1) {
-        if (jogwheel.ConsumeButtonEvent(btn_ev) && btn_ev == BtnState_t::Held)
-            sys_reset();
-        osDelay(1);
-        wdt_iwdg_refresh();
+        gui::StartLoop();
+        if (screen_home_data_t::EverBeenOpenned()) {
+            gui::fsensor::validate_for_cyclical_calls();
+        }
+        redraw = DialogHandler::Access().Loop();
+        if (redraw == redraw_cmd_t::redraw)
+            // all messages received, redraw changes immediately
+            gui_redraw();
+        Screens::Access()->Loop();
+        // Do not redraw if there's an unread FSM message.
+        // New screen can be created already but FSM message can change it
+        // so it's too soon to draw it.
+        if (redraw != redraw_cmd_t::skip)
+            gui_loop();
+        gui::EndLoop();
     }
 }

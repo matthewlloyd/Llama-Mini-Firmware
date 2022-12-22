@@ -3,7 +3,7 @@
 #include "IScreenPrinting.hpp"
 #include "gui.hpp"
 #include "window_header.hpp"
-#include "status_footer.h"
+#include "status_footer.hpp"
 #include "resource.h"
 #include "window_print_progress.hpp"
 #include "liveadjust_z.hpp"
@@ -25,4 +25,5 @@ public:
 
 private:
     virtual void notifyMarlinStart() override;
+    void windowEvent(EventLock lock, window_t *sender, GUI_event_t event, void *param) override;
 };

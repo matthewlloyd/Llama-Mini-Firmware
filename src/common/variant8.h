@@ -3,23 +3,24 @@
 #pragma once
 
 #include <inttypes.h>
-#include <stdlib.h>
+#include <stdbool.h>
 
 enum {
-    VARIANT8_EMPTY = 0x00,     // empty - no data
-    VARIANT8_I8 = 0x01,        // signed char - 1byte
-    VARIANT8_UI8 = 0x02,       // unsigned char - 1byte
-    VARIANT8_I16 = 0x03,       // signed short - 2byte
-    VARIANT8_UI16 = 0x04,      // unsigned short - 2byte
-    VARIANT8_I32 = 0x05,       // signed long - 4byte
-    VARIANT8_UI32 = 0x06,      // unsigned long - 4byte
-    VARIANT8_FLT = 0x07,       // float - 4byte
-    VARIANT8_CHAR = 0x08,      // char - 1byte
-    VARIANT8_USER = 0x09,      // user - up to 7 bytes
-    VARIANT8_PTR = 0x80,       // pointer - 4 bytes,
-    VARIANT8_ERROR = 0x3f,     // error
-    VARIANT8_PTR_OWNER = 0x40, //pointer ownership
-                               //pointer types
+    VARIANT8_EMPTY = 0x00,       // empty - no data
+    VARIANT8_I8 = 0x01,          // signed char - 1byte
+    VARIANT8_BOOL = VARIANT8_I8, // bool - 1byte
+    VARIANT8_UI8 = 0x02,         // unsigned char - 1byte
+    VARIANT8_I16 = 0x03,         // signed short - 2byte
+    VARIANT8_UI16 = 0x04,        // unsigned short - 2byte
+    VARIANT8_I32 = 0x05,         // signed long - 4byte
+    VARIANT8_UI32 = 0x06,        // unsigned long - 4byte
+    VARIANT8_FLT = 0x07,         // float - 4byte
+    VARIANT8_CHAR = 0x08,        // char - 1byte
+    VARIANT8_USER = 0x09,        // user - up to 7 bytes
+    VARIANT8_PTR = 0x80,         // pointer - 4 bytes,
+    VARIANT8_ERROR = 0x3f,       // error
+    VARIANT8_PTR_OWNER = 0x40,   //pointer ownership
+                                 //pointer types
     VARIANT8_PI8 = (VARIANT8_I8 | VARIANT8_PTR),
     VARIANT8_PUI8 = (VARIANT8_UI8 | VARIANT8_PTR),
     VARIANT8_PI16 = (VARIANT8_I16 | VARIANT8_PTR),
@@ -39,7 +40,11 @@ enum {
     VARIANT8_ERR_OOFRNG,     // out of range (during conversion from bigger to lower range number)
 };
 
+#if INTPTR_MAX == INT32_MAX // 32 bit system
 typedef uint64_t variant8_t;
+#elif INTPTR_MAX == INT64_MAX // 64 bit system
+typedef unsigned __int128 variant8_t;
+#endif
 
 #ifdef __cplusplus
 
@@ -63,6 +68,9 @@ extern variant8_t variant8_empty(void);
 
 // returns VARIANT8_I8
 extern variant8_t variant8_i8(int8_t i8);
+
+// returns VARIANT8_BOOL
+extern variant8_t variant8_bool(bool b);
 
 // returns VARIANT8_UI8
 extern variant8_t variant8_ui8(uint8_t ui8);
@@ -103,6 +111,9 @@ extern variant8_t variant8_pui32(uint32_t *pui32, uint16_t count, int init);
 // returns VARIANT8_PFLT
 extern variant8_t variant8_pflt(float *pflt, uint16_t count, int init);
 
+// returns VARIANT8_ERROR
+extern variant8_t variant8_error(uint32_t err32, uint16_t err16, uint8_t err8);
+
 // returns variant8_t type
 extern uint8_t variant8_get_type(variant8_t v);
 // returns variant8_t usr8
@@ -123,13 +134,16 @@ extern uint32_t variant8_get_ui32(variant8_t v);
 extern int32_t variant8_get_i32(variant8_t v);
 
 // returns variant8_t ui16
-extern uint16_t variant_get_ui16(variant8_t v);
+extern uint16_t variant8_get_ui16(variant8_t v);
 
 // returns variant8_t ui8
-extern uint8_t variant_get_ui8(variant8_t v);
+extern uint8_t variant8_get_ui8(variant8_t v);
 
 // returns variant8_t i8
 extern int8_t variant8_get_i8(variant8_t v);
+
+// returns variant8_t bool
+extern bool variant8_get_bool(variant8_t v);
 
 // set variant8_t usr8 member
 extern void variant8_set_usr8(variant8_t *, uint8_t);
@@ -165,7 +179,7 @@ extern int variant8_snprintf(char *str, unsigned int size, const char *fmt, vari
 extern char *variant8_to_str(variant8_t *pvar8, const char *fmt);
 
 // returns variant8 with desired type parsed from string with sscanf
-extern variant8_t variant8_from_str(uint8_t type, char *str, const char *fmt);
+extern variant8_t variant8_from_str(uint8_t type, char *str);
 
 // variant8 realloc function
 extern void *variant8_realloc(void *ptr, uint16_t size);

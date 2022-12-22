@@ -6,9 +6,18 @@
 #include <array>
 
 class ScreenFactory {
+    // menu settings is the biggest, but I cannot access it from here (to use it as argument of aligned_union)
+    // so i have to define minimal size like this
+    //to calculate the size use this char (*size_msg_as_error)[sizeof( ScreenMenuSettings )] = 1;
+#if _DEBUG
+    static constexpr size_t min_union_size = 3620;
+#else
+    static constexpr size_t min_union_size = 2840 + 200;
+#endif
+
     ScreenFactory() = delete;
     ScreenFactory(const ScreenFactory &) = delete;
-    using mem_space = std::aligned_union<4096, screen_home_data_t, screen_splash_data_t>::type;
+    using mem_space = std::aligned_union<min_union_size, screen_home_data_t, screen_splash_data_t>::type;
     static mem_space all_screens;
 
 public:

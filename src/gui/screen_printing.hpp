@@ -1,6 +1,6 @@
 //screen_printing.hpp
 #pragma once
-#include "status_footer.h"
+#include "status_footer.hpp"
 #include "window_header.hpp"
 #include "window_roll_text.hpp"
 #include "window_icon.hpp"
@@ -45,6 +45,7 @@ class screen_printing_data_t : public AddSuperWindow<ScreenPrintingModel> {
 
     window_roll_text_t w_filename;
     WindowPrintProgress w_progress;
+    WindowNumbPrintProgress w_progress_txt;
     window_text_t w_time_label;
     window_text_t w_time_value;
     window_text_t w_etime_label;
@@ -55,7 +56,7 @@ class screen_printing_data_t : public AddSuperWindow<ScreenPrintingModel> {
 
     std::array<char, MAX_TIMEDUR_STR_SIZE> text_time_dur;
     std::array<char, MAX_END_TIMESTAMP_SIZE> text_etime;
-    //std::array<char, 15> label_etime;  // "Remaining Time" or "Print will end" // nope, if you have only 2 static const strings, you can swap pointers
+    //std::array<char, 15> label_etime;  // "Remaining" or "Print will end" // nope, if you have only 2 static const strings, you can swap pointers
     string_view_utf8 label_etime;      // not sure if we really must keep this in memory
     std::array<char, 5> text_filament; // 999m\0 | 1.2m\0
     uint32_t message_timer;
@@ -67,6 +68,7 @@ class screen_printing_data_t : public AddSuperWindow<ScreenPrintingModel> {
 
 public:
     screen_printing_data_t();
+    virtual ~screen_printing_data_t() override;
 
 protected:
     virtual void windowEvent(EventLock /*has private ctor*/, window_t *sender, GUI_event_t event, void *param) override;

@@ -166,15 +166,14 @@ static RectTextLayout multiline_loop(uint8_t MaxColsInRect, uint8_t MaxRowsInRec
 
 /// Draws text into the specified rectangle with proper alignment (@flags)
 /// This cannot horizontally align a text spread over more lines (multiline text).
-/// \param flags Use ALIGN constants from guitypes.h. Use RENDER_FLG_WORDB for line wrapping
-void render_text_align(Rect16 rc, string_view_utf8 text, const font_t *font, color_t clr_bg, color_t clr_fg, padding_ui8_t padding, uint16_t flags) {
+void render_text_align(Rect16 rc, string_view_utf8 text, const font_t *font, color_t clr_bg, color_t clr_fg, padding_ui8_t padding, text_flags flags) {
     Rect16 rc_pad = rc;
     rc_pad.CutPadding(padding);
 
     /// 1st pass reading the string_view_utf8 - font_meas_text also computes the number of utf8 characters (i.e. individual bitmaps) in the input string
     uint16_t strlen_text = 0;
-    const point_ui16_t txt_size = font_meas_text(font, &text, &strlen_text);
-    if (txt_size.x == 0 || txt_size.y == 0) {
+    const size_ui16_t txt_size = font_meas_text(font, &text, &strlen_text);
+    if (txt_size.w == 0 || txt_size.h == 0) {
         /// empty text => draw background rectangle only
         display::FillRect(rc, clr_bg);
         return;
@@ -182,11 +181,11 @@ void render_text_align(Rect16 rc, string_view_utf8 text, const font_t *font, col
 
     /// single line, can modify rc pad
     if (font->h * 2 > rc_pad.Height()                              /// 2 lines would not fit
-        || (txt_size.y == font->h && txt_size.x <= rc_pad.Width()) /// text fits into a single line completely
-        || !(flags & RENDER_FLG_WORDB)) {                          /// wrapping turned off
+        || (txt_size.h == font->h && txt_size.w <= rc_pad.Width()) /// text fits into a single line completely
+        || !flags.IsMultiline()) {                                 /// wrapping turned off
 
-        Rect16 rc_txt = Rect16(0, 0, txt_size.x, txt_size.y); /// set size
-        rc_txt.Align(rc_pad, flags & ALIGN_MASK);             /// position the rectangle
+        Rect16 rc_txt = Rect16(0, 0, txt_size.w, txt_size.h); /// set size
+        rc_txt.Align(rc_pad, flags.align);                    /// position the rectangle
         rc_pad = rc_txt.Intersection(rc_pad);                 ///  set padding rect to new value, crop the rectangle if the text is too long
 
         /// 2nd pass reading the string_view_utf8 - draw the text
@@ -201,7 +200,7 @@ void render_text_align(Rect16 rc, string_view_utf8 text, const font_t *font, col
         RectTextLayout layout = multiline_loop(MaxColsInRect, MaxRowsInRect, text);
 
         Rect16 rc_txt = Rect16(0, 0, rc_pad.Width(), font->h * layout.GetLineCount()); /// set size
-        rc_txt.Align(rc_pad, flags & ALIGN_MASK);                                      /// position the rectangle
+        rc_txt.Align(rc_pad, flags.align);                                             /// position the rectangle
         rc_pad = rc_txt.Intersection(rc_pad);                                          ///  set padding rect to new value, crop the rectangle if the text is too long
 
         Rect16 line_to_align = rc_pad;
@@ -213,7 +212,7 @@ void render_text_align(Rect16 rc, string_view_utf8 text, const font_t *font, col
         for (size_t i = 0; i < layout.GetLineCount(); ++i) {
             const size_t line_char_cnt = layout.LineCharacters(i);
             Rect16 line_rect(0, 0, font->w * line_char_cnt, font->h);
-            line_rect.Align(line_to_align, flags & ALIGN_MASK);
+            line_rect.Align(line_to_align, flags.align);
 
             //in front of line
             Rect16 front = line_to_align.LeftSubrect(line_rect);
@@ -236,63 +235,20 @@ void render_text_align(Rect16 rc, string_view_utf8 text, const font_t *font, col
     fill_between_rectangles(&rc, &rc_pad, clr_bg);
 }
 
-void render_icon_align(Rect16 rc, uint16_t id_res, color_t clr0, uint16_t flags) {
-    color_t opt_clr;
-    switch ((flags >> 8) & (ROPFN_SWAPBW | ROPFN_DISABLE)) {
-    case ROPFN_SWAPBW | ROPFN_DISABLE:
-        opt_clr = GuiDefaults::ColorDisabled;
-        break;
-    case ROPFN_SWAPBW:
-        opt_clr = clr0 ^ 0xffffffff;
-        break;
-    case ROPFN_DISABLE:
-        opt_clr = clr0;
-        break;
-    default:
-        opt_clr = clr0;
-        break;
-    }
+void render_icon_align(Rect16 rc, uint16_t id_res, color_t clr_back, icon_flags flags) {
+
     point_ui16_t wh_ico = icon_meas(resource_ptr(id_res));
     if (wh_ico.x && wh_ico.y) {
         Rect16 rc_ico = Rect16(0, 0, wh_ico.x, wh_ico.y);
-        rc_ico.Align(rc, flags & ALIGN_MASK);
+        rc_ico.Align(rc, flags.align);
         rc_ico = rc_ico.Intersection(rc);
-        fill_between_rectangles(&rc, &rc_ico, opt_clr);
-        display::DrawIcon(point_ui16(rc_ico.Left(), rc_ico.Top()), id_res, clr0, (flags >> 8) & 0x0f);
-    } else
-        display::FillRect(rc, opt_clr);
-}
-
-//todo rewrite
-void render_unswapable_icon_align(Rect16 rc, uint16_t id_res, color_t clr0, uint16_t flags) {
-    color_t opt_clr;
-    switch ((flags >> 8) & (ROPFN_SWAPBW | ROPFN_DISABLE)) {
-    case ROPFN_SWAPBW | ROPFN_DISABLE:
-        opt_clr = GuiDefaults::ColorDisabled;
-        break;
-    case ROPFN_SWAPBW:
-        opt_clr = clr0 ^ 0xffffffff;
-        break;
-    case ROPFN_DISABLE:
-        opt_clr = clr0;
-        break;
-    default:
-        opt_clr = clr0;
-        break;
+        display::DrawIcon(point_ui16(rc_ico.Left(), rc_ico.Top()), id_res, clr_back, flags.raster_flags);
+    } else {
+        display::FillRect(rc, clr_back);
     }
-    flags &= ~(ROPFN_SWAPBW << 8);
-    point_ui16_t wh_ico = icon_meas(resource_ptr(id_res));
-    if (wh_ico.x && wh_ico.y) {
-        Rect16 rc_ico = Rect16(0, 0, wh_ico.x, wh_ico.y);
-        rc_ico.Align(rc, flags & ALIGN_MASK);
-        rc_ico = rc_ico.Intersection(rc);
-        fill_between_rectangles(&rc, &rc_ico, opt_clr);
-        display::DrawIcon(point_ui16(rc_ico.Left(), rc_ico.Top()), id_res, clr0, (flags >> 8) & 0x0f);
-    } else
-        display::FillRect(rc, opt_clr);
 }
 
-point_ui16_t font_meas_text(const font_t *pf, string_view_utf8 *str, uint16_t *numOfUTF8Chars) {
+size_ui16_t font_meas_text(const font_t *pf, string_view_utf8 *str, uint16_t *numOfUTF8Chars) {
     int x = 0;
     int y = 0;
     int w = 0;
@@ -313,5 +269,9 @@ point_ui16_t font_meas_text(const font_t *pf, string_view_utf8 *str, uint16_t *n
         h = y + char_h;
     }
     str->rewind();
-    return point_ui16((uint16_t)std::max(x, w), (uint16_t)h);
+    return { uint16_t(std::max(x, w)), uint16_t(h) };
+}
+
+void render_rect(Rect16 rc, color_t clr) {
+    display::FillRect(rc, clr);
 }

@@ -11,33 +11,6 @@
 /**
  * @name Macros manipulating PIN_TABLE macro
  *
- * Define @p PIN_TABLE macro containing all physical pins used in project.
- * When defining @p PIN_TABLE use @p COMMA macro to separate parameters inside sections PORTPIN and PARAMETERS,
- * use ordinary comma (,) to separate sections (TYPE, NAME, PORTPIN, PARAMETERS).
- * @par Sections:
- * @n @p TYPE pin type e.g. InputPin, OutputPin, OutputInputPin, ...
- * @n @p NAME Name used to access pin. E.g. fastBoot, later accessed as e.g. fastboot.read()
- * @n @p PORTPIN Physical location of pin. E.g. IoPort::C COMMA IoPin::p7 or BUDDY_PIN(E0_DIR) for pin defined for MARLIN earlier.
- * @n @p PARAMETERS Parameters passed to pin constructor. Number and type of parameters varies between Pins @p TYPE
- *
- * @par Example usage:
- * @code
- * #define PIN_TABLE(F) \
- *      F(buddy::hw::OutputPin, e0Dir, BUDDY_PIN(E0_DIR), InitState::reset COMMA OMode::pushPull COMMA OSpeed::low) \
- *      F(buddy::hw::InputPin, fastBoot, IoPort::C COMMA IoPin::p7, IMode::input COMMA Pull::up)
- *
- * namespace buddy::hw {
- * DECLARE_PINS(PIN_TABLE)
- * }
- *
- * CONFIGURE_PINS(PIN_TABLE)
- *
- * constexpr PinChecker pinsToCheck[] = {
- *   PINS_TO_CHECK(PIN_TABLE)
- * };
- *
- * @endcode
- *
  * @{
  */
 /**
@@ -51,7 +24,17 @@
  * DECLARE_PINS(PIN_TABLE)
  * @endcode
  */
-#define DECLARE_PINS(TYPE, NAME, PORTPIN, PARAMETERS) inline constexpr TYPE NAME(PORTPIN, PARAMETERS);
+#define DECLARE_PINS(TYPE, NAME, PORTPIN, PARAMETERS, INTERRUPT_HANDLER) inline constexpr TYPE NAME(PORTPIN, PARAMETERS);
+
+/**
+ * @brief Declare all pins supplied in VIRTUAL_PIN_TABLE parameter
+ * @par Usage:
+ * @code
+ * DECLARE_VIRTUAL_PINS(VIRTUAL_PIN_TABLE)
+ * @endcode
+ */
+#define DECLARE_VIRTUAL_PINS(TYPE, READ_FN, ISR_FN, NAME, PORTPIN, PARAMETERS) inline constexpr TYPE<READ_FN, ISR_FN> NAME(PARAMETERS);
+
 /**
  * @brief Configure all pins supplied in PIN_TABLE parameter
  * @par Usage:
@@ -59,7 +42,7 @@
  * CONFIGURE_PINS(PIN_TABLE)
  * @endcode
  */
-#define CONFIGURE_PINS(TYPE, NAME, PORTPIN, PARAMETERS) buddy::hw::NAME.configure();
+#define CONFIGURE_PINS(TYPE, NAME, PORTPIN, PARAMETERS, INTERRUPT_HANDLER) buddy::hw::NAME.configure();
 /**
  * @brief Generate array of physical location of all pins supplied in PIN_TABLE parameter
  * @par Usage:
@@ -69,10 +52,13 @@
  * };
  * @endcode
  */
-#define PINS_TO_CHECK(TYPE, NAME, PORTPIN, PARAMETERS) { PORTPIN },
+#define PINS_TO_CHECK(TYPE, NAME, PORTPIN, PARAMETERS, INTERRUPT_HANDLER) { PORTPIN },
 /**@}*/
 
 namespace buddy::hw {
+
+inline void noHandler() {
+}
 
 enum class IoPort : uint8_t {
     A = 0,
@@ -113,6 +99,10 @@ public:
         high = GPIO_PinState::GPIO_PIN_SET,
     };
 
+    static constexpr uint16_t IoPinToHal(IoPin ioPin) {
+        return (0x1U << static_cast<uint16_t>(ioPin));
+    }
+
 protected:
     constexpr Pin(IoPort ioPort, IoPin ioPin)
         : m_halPortBase(IoPortToHalBase(ioPort))
@@ -126,10 +116,6 @@ private:
     static constexpr uint32_t IoPortToHalBase(IoPort ioPort) {
         return (GPIOA_BASE + (static_cast<uint32_t>(ioPort) * (GPIOB_BASE - GPIOA_BASE)));
     }
-    static constexpr uint16_t IoPinToHal(IoPin ioPin) {
-        return (0x1U << static_cast<uint16_t>(ioPin));
-    }
-
     const uint32_t m_halPortBase;
 
 protected:
@@ -157,7 +143,8 @@ public:
 enum class IMode {
     input = GPIO_MODE_INPUT,
     IT_rising = GPIO_MODE_IT_RISING,
-    IT_faling = GPIO_MODE_IT_FALLING,
+    IT_falling = GPIO_MODE_IT_FALLING,
+    IT_rising_falling = GPIO_MODE_IT_RISING_FALLING,
 };
 
 enum class Pull : uint8_t {
@@ -186,9 +173,59 @@ public:
 private:
     void configure(Pull pull) const;
 
-public:
+protected:
     IMode m_mode;
     Pull m_pull;
+};
+
+/**
+ *
+ */
+class InterruptPin : public InputPin {
+public:
+    /**
+     * @brief InterruptPin constructor
+     *
+     * Priorities are shared between pins in a group. See InterruptPin::getIRQn() for grouping.
+     * If it is impossible to fulfill requested priority, you will get bsod("IRQ priority mismatch.")
+     * during configure() call.
+     *
+     * @param ioPort
+     * @param ioPin
+     * @param iMode
+     * @param pull
+     * @param preemptPriority Priority, highest priority is 0,
+     *          maximum priority from which RTOS ISR API calls are allowed is configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY
+     *          minimum priority depends on processor and how available priority bits are assigned between
+     *          priority and sub-priority.
+     * @param subPriority Highest sub-priority is 0 (recommended as it is always available).
+     *          Lowest sub-priority depends on how available priority bits are assigned between
+     *          priority and sub-priority.
+     */
+    constexpr InterruptPin(IoPort ioPort, IoPin ioPin, IMode iMode, Pull pull, uint8_t preemptPriority, uint8_t subPriority)
+        : InputPin(ioPort, ioPin, iMode, pull)
+        , m_priority { preemptPriority, subPriority } {}
+    void configure() const;
+    IRQn_Type getIRQn() const;
+
+private:
+    struct Priority {
+        uint8_t preemptPriority : 4;
+        uint8_t subPriority : 4;
+    };
+    Priority m_priority;
+};
+
+typedef Pin::State (*ReadFunction)();
+typedef void (*InterruptRoutine)();
+
+template <ReadFunction readFunction, InterruptRoutine interruptRoutine>
+class VirtualInterruptPin {
+public:
+    constexpr VirtualInterruptPin(IMode) {}
+    void configure() const {}
+    Pin::State read() const { return readFunction(); }
+    void isr() const { interruptRoutine(); }
 };
 
 enum class OMode : uint8_t {
@@ -269,6 +306,24 @@ private:
     friend class InputEnabler;
 };
 
+class DummyOutputPin : protected Pin {
+public:
+    constexpr DummyOutputPin(IoPort ioPort, IoPin ioPin, State initState, OMode oMode, OSpeed oSpeed)
+        : Pin(ioPort, ioPin)
+        , m_state(initState) {}
+    /**
+     * @brief  Read output pin.
+     *
+     * @return initState
+     */
+    State read() const { return m_state; }
+    void write(State) const {}
+    void configure() const {}
+
+private:
+    State m_state;
+};
+
 /**
  * @brief Enable OutputInputPin input mode when constructed, implements read(), revert OutputInputPin to output when destroyed.
  */
@@ -288,4 +343,5 @@ public:
 private:
     const OutputInputPin &m_outputInputPin;
 };
+
 } // namespace buddy::hw

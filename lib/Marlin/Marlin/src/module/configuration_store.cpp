@@ -147,8 +147,8 @@ static float get_steps_per_unit(size_t index) {
 }
 #else
 static constexpr float get_steps_per_unit(size_t index) {
-  static constexpr float _DASU[] = DEFAULT_AXIS_STEPS_PER_UNIT;
-  return pgm_read_float(&_DASU[ALIM(i, _DASU)]);
+  constexpr float _DASU[] = DEFAULT_AXIS_STEPS_PER_UNIT;
+  return pgm_read_float(&_DASU[ALIM(index, _DASU)]);
 }
 #endif // USE_PRUSA_EEPROM_AS_SOURCE_OF_DEFAULT_VALUES
 static const feedRate_t _DMF[] PROGMEM = DEFAULT_MAX_FEEDRATE;
@@ -426,7 +426,7 @@ void MarlinSettings::postprocess() {
     planner.recalculate_max_e_jerk();
   #endif
 
-  // Refresh steps_to_mm with the reciprocal of axis_steps_per_mm
+  // Refresh mm_per_step with the reciprocal of axis_steps_per_mm
   // and init stepper.count[], planner.position[] with current_position
   planner.refresh_positioning();
 

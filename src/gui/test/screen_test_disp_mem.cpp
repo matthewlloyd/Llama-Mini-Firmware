@@ -9,9 +9,9 @@
     #include "config.h"
     #include "stm32f4xx_hal.h"
 
-    #include "st7789v.h"
     #include "sys.h"
     #include <assert.h>
+    #include "st7789v.hpp"
 
 extern int sim_heater_temp2val(float temp);
 
@@ -173,7 +173,7 @@ enum {
 //cannot use normal spin with format "%A"
 static void hexSpinInit(int16_t id0, Rect16 rect, window_spin_t *pSpin) {
     window_create_ptr(WINDOW_CLS_SPIN, id0, rect, pSpin);
-    pSpin->PrintAsInt();
+    pSpin->PrintAsInt32();
     pSpin->SetFormat("%X");
     pSpin->SetMinMaxStep(0.0F, 15.0F, 1.0F);
     pSpin->SetValue(0.0F);
@@ -435,10 +435,10 @@ void dispRamTest(size_t test_ID, size_t row) {
     static size_t col_pos = -1;
     static uint32_t start_time = 0;
 
-    start_time = HAL_GetTick();
+    start_time = gui::GetTick;
 
     //ttl check - to be responsive
-    while (start_time + ttl >= HAL_GetTick()) {
+    while (start_time + ttl >= gui::GetTick) {
         col_pos = dispRamTest_NextCol(col_pos, rect_w, rect_space, rect_count, border_w);
         size_t rect_index = _getRectIndex(col_pos, rect_w, rect_space, border_w);
 

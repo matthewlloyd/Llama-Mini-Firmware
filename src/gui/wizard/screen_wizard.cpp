@@ -1,14 +1,13 @@
 // screen_wizard.cpp
 
 #include "screen_wizard.hpp"
-#include "dbg.h"
 #include "config.h"
 #include "stm32f4xx_hal.h"
 #include "marlin_client.h"
 #include "wizard_config.hpp"
-#include "filament.h"
+#include "filament.hpp"
 #include "eeprom.h"
-#include "filament_sensor.hpp"
+#include "filament_sensor_api.hpp"
 #include "i18n.h"
 #include "RAII.hpp"
 #include "ScreenHandler.hpp"
@@ -133,12 +132,12 @@ WizardState_t StateFnc_START() {
 #endif //_DEBUG
 
     //IDR_PNG_icon_pepa
-    switch (MsgBoxPepa(translatedText, resp)) {
+    switch (MsgBoxPepa(translatedText, resp, 0, GuiDefaults::RectScreenNoHeader)) {
 #ifdef _DEBUG
     case Response::Ignore:
-        eeprom_set_var(EEVAR_RUN_SELFTEST, variant8_ui8(0)); // clear selftest flag
-        eeprom_set_var(EEVAR_RUN_XYZCALIB, variant8_ui8(0)); // clear XYZ calib flag
-        eeprom_set_var(EEVAR_RUN_FIRSTLAY, variant8_ui8(0)); // clear first layer flag
+        eeprom_set_bool(EEVAR_RUN_SELFTEST, false); // clear selftest flag
+        eeprom_set_bool(EEVAR_RUN_XYZCALIB, false); // clear XYZ calib flag
+        eeprom_set_bool(EEVAR_RUN_FIRSTLAY, false); // clear first layer flag
         return WizardState_t::EXIT;
 #endif //_DEBUG
     case Response::Yes:
@@ -151,10 +150,15 @@ WizardState_t StateFnc_START() {
 
 WizardState_t StateFnc_INIT() {
     //wizard_init(_START_TEMP_NOZ, _START_TEMP_BED);
-    if (fs_get_state() == fsensor_t::Disabled) {
-        fs_enable();
-        if (fs_wait_initialized() == fsensor_t::NotConnected)
-            fs_disable();
+    if (FSensors_instance().GetPrinter() == fsensor_t::Disabled) {
+        FSensors_instance().Enable();
+
+        while (FSensors_instance().IsPrinter_processing_request()) {
+            HAL_Delay(0); // switch to another thread
+        }
+
+        if (FSensors_instance().GetPrinter() == fsensor_t::NotConnected)
+            FSensors_instance().Disable();
     }
 
     //preheat for SELFTEST_TEMP, so selftest is quicker

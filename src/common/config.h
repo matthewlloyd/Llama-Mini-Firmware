@@ -3,7 +3,7 @@
 
 #include "printers.h"
 #include <avr/pgmspace.h>
-#include "config_a3ides2209_02.h"
+#include "config_buddy_2209_02.h"
 
 //--------------------------------------
 //BUDDY_ENABLE_ETHERNET configuration
@@ -19,6 +19,10 @@ enum {
     MARLIN_CLIENT_QUEUE = 16,  // size of marlin client input message queue (number of messages)
 };
 
+#if defined(_DEBUG)
+    #define BUDDY_ENABLE_DFU_ENTRY
+#endif
+
 //display PSOD instead of BSOD
 //#define PSOD_BSOD
 
@@ -26,8 +30,11 @@ enum {
 #define CRC32_USE_HW
 #define CRC32_USE_RTOS
 
+// ESP configs
+#define USE_ESP01_WITH_UART6
+
 //guiconfig.h included with config
-#include "guiconfig.h"
+#include "../guiconfig/guiconfig.h"
 
 //resource.h included with config
 #include "resource.h"

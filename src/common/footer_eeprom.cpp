@@ -17,13 +17,10 @@ using namespace footer::eeprom;
  * @return record
  */
 static record loadAndValidateRecord() {
-    uint32_t stored = eeprom_get_var(EEVAR_FOOTER_SETTING);
-    record rec = Decode(stored);
+    record rec = Decode(eeprom_get_var(EEVAR_FOOTER_SETTING));
     uint32_t valid = Encode(rec);
-    if (stored != valid) {
-        // cannot use Store - would recursively call this function
-        eeprom_set_var(EEVAR_FOOTER_SETTING, variant8_ui32(valid));
-    }
+    // cannot use Store - would recursively call this function
+    eeprom_set_ui32(EEVAR_FOOTER_SETTING, valid);
     return rec;
 }
 
@@ -39,7 +36,7 @@ record footer::eeprom::Load() {
 changed_t footer::eeprom::Store(record rec) {
     if (get_ref() == rec)
         return changed_t::no;
-    eeprom_set_var(EEVAR_FOOTER_SETTING, variant8_ui32(Encode(rec)));
+    eeprom_set_ui32(EEVAR_FOOTER_SETTING, Encode(rec));
     get_ref() = rec;
     return changed_t::yes;
 }
@@ -62,13 +59,10 @@ bool footer::eeprom::Set(items item, size_t index) {
  * @return ItemDrawCnf
  */
 static ItemDrawCnf loadAndValidateDrawCnf() {
-    uint32_t stored = eeprom_get_var(EEVAR_FOOTER_DRAW_TYPE);
-    ItemDrawCnf cnf = ItemDrawCnf(stored);
+    ItemDrawCnf cnf = ItemDrawCnf(eeprom_get_var(EEVAR_FOOTER_DRAW_TYPE));
     uint32_t valid = uint32_t(cnf);
-    if (stored != valid) {
-        // cannot use Set - would recursively call this function
-        eeprom_set_var(EEVAR_FOOTER_DRAW_TYPE, variant8_ui32(valid));
-    }
+    // cannot use Set - would recursively call this function
+    eeprom_set_ui32(EEVAR_FOOTER_DRAW_TYPE, valid);
     return cnf;
 }
 
@@ -84,7 +78,7 @@ ItemDrawCnf footer::eeprom::LoadItemDrawCnf() {
 changed_t footer::eeprom::Set(ItemDrawCnf cnf) {
     if (getDrawCnf_ref() == cnf)
         return changed_t::no;
-    eeprom_set_var(EEVAR_FOOTER_DRAW_TYPE, variant8_ui32(uint32_t(cnf)));
+    eeprom_set_ui32(EEVAR_FOOTER_DRAW_TYPE, uint32_t(cnf));
     getDrawCnf_ref() = cnf;
     return changed_t::yes;
 }
@@ -117,4 +111,30 @@ draw_zero_t footer::eeprom::GetItemDrawZero() {
 
 uint8_t footer::eeprom::GetCenterNAndFewer() {
     return getDrawCnf_ref().centerNAndFewer;
+}
+record footer::eeprom::DecodeWithSize(uint32_t encoded, size_t min_bit_size) {
+    uint32_t mask = (uint32_t(1) << (min_bit_size)) - 1;
+    record ret = { {} };
+
+    for (size_t i = 0; i < count; ++i) {
+        uint32_t decoded = encoded & mask;
+        if (decoded > size_t(items::count_))
+            return footer::DefaultItems; // data corrupted, return default setting
+        ret[i] = items(decoded);
+        encoded >>= min_bit_size;
+    }
+    return ret;
+}
+record footer::eeprom::Decode(uint32_t encoded) {
+    uint32_t trailing_ones = pow(2, count_of_trailing_ones) - 1;
+    if ((encoded & trailing_ones) != trailing_ones) {
+        return footer::DefaultItems;
+    }
+    encoded >>= count_of_trailing_ones;
+    return DecodeWithSize(encoded, value_bit_size);
+}
+uint32_t footer::eeprom::ConvertFromOldEeprom(uint32_t encoded, size_t number_of_items_in_old_eeprom) {
+    const size_t old_min_eeprom_item_size = floor(log2(number_of_items_in_old_eeprom)) + 1;
+    auto decoded = footer::eeprom::DecodeWithSize(encoded, old_min_eeprom_item_size);
+    return Encode(decoded);
 }

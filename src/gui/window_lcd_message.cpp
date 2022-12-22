@@ -35,7 +35,7 @@ WindowLCDMessage::WindowLCDMessage(window_t *parent, Rect16 rect)
     lcd_message_text[0] = 0;
     lcd_message_text[LCD_MESSAGE_MAX_LEN] = 0;
     font = resource_font(IDR_FNT_SMALL);
-    SetAlignment(ALIGN_CENTER);
+    SetAlignment(Align_t::Center());
 }
 
 void WindowLCDMessage::windowEvent(EventLock /*has private ctor*/, window_t *sender, GUI_event_t event, void *param) {

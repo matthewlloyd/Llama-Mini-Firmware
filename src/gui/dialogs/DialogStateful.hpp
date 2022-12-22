@@ -2,22 +2,27 @@
 
 #include "IDialog.hpp"
 #include <array>
+#include <optional>
 #include "DialogRadioButton.hpp"
 #include "marlin_client.hpp"
 #include "client_response.hpp"
 #include "i18n.h"
 #include "window_text.hpp"
 #include "window_progress.hpp"
+#include "fsm_types.hpp"
 
 // function pointer for onEnter & onExit callbacks
 using change_state_cb_t = void (*)();
 
 class IDialogMarlin : public IDialog {
 protected:
-    virtual bool change(uint8_t phs, uint8_t progress_tot, uint8_t progress) = 0;
+    virtual bool change(uint8_t phase, fsm::PhaseData data) = 0;
 
 public:
-    bool Change(uint8_t phs, uint8_t progress_tot, uint8_t progress) { return change(phs, progress_tot, progress); }
+    bool Change(fsm::BaseData data) { return change(data.GetPhase(), data.GetData()); }
+    IDialogMarlin(Rect16 rc)
+        : IDialog(rc) {}
+    IDialogMarlin(std::optional<Rect16> rc = std::nullopt);
 };
 
 //abstract parent containing general code for any number of phases
@@ -49,10 +54,14 @@ protected:
     // must be virtual because of `states` list is in template protected
     virtual void phaseEnter() = 0;
     virtual void phaseExit() = 0;
-    virtual bool change(uint8_t phs, uint8_t progress_tot, uint8_t progress) override;
+    virtual bool change(uint8_t phase, fsm::PhaseData data) override;
+
+    static Rect16 get_title_rect(Rect16 rect);
+    static Rect16 get_progress_rect(Rect16 rect);
+    static Rect16 get_label_rect(Rect16 rect, std::optional<has_footer> dialog_has_footer);
 
 public:
-    IDialogStateful(string_view_utf8 name);
+    IDialogStateful(string_view_utf8 name, std::optional<has_footer> child_has_footer = std::nullopt);
 };
 
 /*****************************************************************************/
@@ -67,15 +76,15 @@ public:
 protected:
     States states; //phase text and radiobutton + onEnter & onExit cb
 public:
-    DialogStateful(string_view_utf8 name, States st)
-        : IDialogStateful(name)
+    DialogStateful(string_view_utf8 name, States st, std::optional<has_footer> child_has_footer = std::nullopt)
+        : IDialogStateful(name, child_has_footer)
         , states(st) {};
 
 protected:
     virtual bool can_change(uint8_t phase) { return phase < SZ; }
     // get arguments callbacks and call them
     virtual void phaseEnter() {
-        radio.Change(&states[phase].btn_resp, &states[phase].btn_labels);
+        radio.Change(states[phase].btn_resp, &states[phase].btn_labels);
         label.SetText(_(states[phase].label));
         if (states[phase].onEnter) {
             states[phase].onEnter();
@@ -105,11 +114,9 @@ void DialogStateful<T>::windowEvent(EventLock /*has private ctor*/, window_t * /
     }
     case GUI_event_t::ENC_UP:
         ++radio;
-        gui_invalidate();
         break;
     case GUI_event_t::ENC_DN:
         --radio;
-        gui_invalidate();
         break;
     default:
         break;

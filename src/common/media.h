@@ -3,9 +3,6 @@
 
 #include <inttypes.h>
 
-static const uint16_t MEDIA_PRINT_FILENAME_SIZE = 128;
-static const uint16_t MEDIA_PRINT_FILEPATH_SIZE = 128;
-
 typedef enum {
     media_state_REMOVED = 0,  // media is inserted
     media_state_INSERTED = 1, // media is removed
@@ -40,6 +37,8 @@ extern media_state_t media_get_state(void);
 /// Updates marlin_vars->media_LFN as a side-effect by opening the marlin_vars->media_SFN_path and reading its LFN
 extern void media_print_start(const char *sfnFilePath);
 
+extern void media_preselect_file(const char *sfnFilePath);
+
 extern void media_print_stop(void);
 
 extern void media_print_pause(void);
@@ -65,12 +64,6 @@ extern void media_set_inserted(void);
 extern void media_set_removed(void);
 
 extern void media_set_error(media_error_t error);
-
-/// Computes short file name (SFN) path from a (potentially) long file name (LFN)
-/// path in filepath.
-/// @param sfn output buffer to store the SFN path
-/// @param filepath input LFN path, intentionally NOT const -
-extern void media_get_SFN_path(char *sfn, uint32_t sfn_size, char *filepath);
 
 #ifdef __cplusplus
 }

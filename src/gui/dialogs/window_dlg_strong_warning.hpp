@@ -13,13 +13,13 @@
 #include "window_icon.hpp"
 #include "i18n.h"
 #include "window_header.hpp"
-#include "status_footer.h"
+#include "status_footer.hpp"
 
 //Singleton dialog for messages
 class window_dlg_strong_warning_t : public AddSuperWindow<IDialog> {
 protected: // inherited by unit tests, must be protected
     window_header_t header;
-    status_footer_t footer;
+    StatusFooter footer;
 
     window_icon_t icon;
     window_text_t text;
@@ -31,6 +31,8 @@ protected: // inherited by unit tests, must be protected
     static constexpr const char *Title = N_("INFO");
     static constexpr const char *HotendFanErrorMsg = N_("Hotend fan not spinning. Check it for possible debris, then inspect the wiring.");
     static constexpr const char *PrintFanErrorMsg = N_("Print fan not spinning. Check it for possible debris, then inspect the wiring.");
+    static constexpr const char *TitleNozzle = N_("TEMP NOT MATCHING");
+    static constexpr const char *HotendTempDiscrepancyMsg = N_("Measured temperature is not matching expected value. Check the thermistor is in contact with hotend. In case of damage, replace it.");
     static constexpr const char *HeaterTimeoutMsg = N_("Heating disabled due to 30 minutes of inactivity.");
     static constexpr const char *USBFlashDiskError = N_("USB drive error, the print is now paused. Reconnect the drive.");
 
@@ -41,6 +43,7 @@ protected: // inherited by unit tests, must be protected
 public:
     static void ShowHotendFan();
     static void ShowPrintFan();
+    static void ShowHotendTempDiscrepancy();
     static void ShowHeatersTimeout();
     static void ShowUSBFlashDisk();
 };

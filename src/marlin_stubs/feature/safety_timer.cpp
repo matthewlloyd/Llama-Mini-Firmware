@@ -6,7 +6,6 @@
 #include "../../lib/Marlin/Marlin/src/Marlin.h"
 #include "../../lib/Marlin/Marlin/src/module/temperature.h"
 #include "safety_timer_stubbed.hpp"
-#include "pause_stubbed.hpp"
 #include "marlin_server.hpp"
 
 SafetyTimer &SafetyTimer::Instance() {
@@ -68,6 +67,7 @@ SafetyTimer::expired_t SafetyTimer::Loop() {
             thermalManager.disable_all_heaters();
             set_warning(WarningType::HeatersTimeout);
         }
+        marlin_server_set_temp_to_display(0);
         return expired_t::yes;
     }
     if (printingIsPaused()) {
@@ -81,6 +81,7 @@ SafetyTimer::expired_t SafetyTimer::Loop() {
     } else {
         // disable nozzle and bed
         thermalManager.disable_all_heaters();
+        marlin_server_set_temp_to_display(0);
         set_warning(WarningType::HeatersTimeout);
     }
 
@@ -92,10 +93,10 @@ void safety_timer_set_interval(millis_t ms) {
     SafetyTimer::Instance().SetInterval(ms);
 }
 
-void SafetyTimer::BindPause(PausePrivatePhase &pause) {
+void SafetyTimer::BindPause(IPause &pause) {
     pBoundPause = &pause;
 }
-void SafetyTimer::UnbindPause(PausePrivatePhase &pause) {
+void SafetyTimer::UnbindPause(IPause &pause) {
     if (pBoundPause == &pause) {
         pBoundPause = nullptr;
     }

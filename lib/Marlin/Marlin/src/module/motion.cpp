@@ -33,6 +33,7 @@
 #include "../gcode/gcode.h"
 
 #include "../inc/MarlinConfig.h"
+#include "../Marlin.h"
 
 #ifdef MINDA_BROKEN_CABLE_DETECTION
 #include "minda_broken_cable_detection.h"
@@ -345,7 +346,8 @@ void _internal_move_to_destination(const feedRate_t &fr_mm_s/*=0.0f*/
 }
 
 /**
- * Plan a move to (X, Y, Z) and set the current_position
+ * Performs a blocking fast parking move to (X, Y, Z) and sets the current_position.
+ * Parking (Z-Manhattan): Moves XY and Z independently. Raises Z before or lowers Z after XY motion.
  */
 void do_blocking_move_to(const float rx, const float ry, const float rz, const feedRate_t &fr_mm_s/*=0.0*/) {
   if (DEBUGGING(LEVELING)) DEBUG_XYZ(">>> do_blocking_move_to", rx, ry, rz);
@@ -353,11 +355,18 @@ void do_blocking_move_to(const float rx, const float ry, const float rz, const f
   const feedRate_t z_feedrate = fr_mm_s ?: homing_feedrate(Z_AXIS),
                   xy_feedrate = fr_mm_s ?: feedRate_t(XY_PROBE_FEEDRATE_MM_S);
 
+  plan_park_move_to(rx, ry, rz, xy_feedrate, z_feedrate);
+  if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("<<< do_blocking_move_to");
+  planner.synchronize();
+}
+
+/// Z-Manhattan fast move
+void plan_park_move_to(const float rx, const float ry, const float rz, const feedRate_t &fr_xy, const feedRate_t &fr_z){
   #if ENABLED(DELTA)
 
     if (!position_is_reachable(rx, ry)) return;
 
-    REMEMBER(fr, feedrate_mm_s, xy_feedrate);
+    REMEMBER(fr, feedrate_mm_s, fr_xy);
 
     destination = current_position;          // sync destination at the start
 
@@ -378,7 +387,7 @@ void do_blocking_move_to(const float rx, const float ry, const float rz, const f
 
     if (rz > current_position.z) {                            // raising?
       destination.z = rz;
-      prepare_internal_fast_move_to_destination(z_feedrate);  // set current_position from destination
+      prepare_internal_fast_move_to_destination(fr_z);  // set current_position from destination
       if (DEBUGGING(LEVELING)) DEBUG_POS("z raise move", current_position);
     }
 
@@ -388,7 +397,7 @@ void do_blocking_move_to(const float rx, const float ry, const float rz, const f
 
     if (rz < current_position.z) {                            // lowering?
       destination.z = rz;
-      prepare_internal_fast_move_to_destination(z_feedrate);  // set current_position from destination
+      prepare_internal_fast_move_to_destination(fr_z);  // set current_position from destination
       if (DEBUGGING(LEVELING)) DEBUG_POS("z lower move", current_position);
     }
 
@@ -401,16 +410,16 @@ void do_blocking_move_to(const float rx, const float ry, const float rz, const f
     // If Z needs to raise, do it before moving XY
     if (destination.z < rz) {
       destination.z = rz;
-      prepare_internal_fast_move_to_destination(z_feedrate);
+      prepare_internal_fast_move_to_destination(fr_z);
     }
 
     destination.set(rx, ry);
-    prepare_internal_fast_move_to_destination(xy_feedrate);
+    prepare_internal_fast_move_to_destination(fr_xy);
 
     // If Z needs to lower, do it after moving XY
     if (destination.z > rz) {
       destination.z = rz;
-      prepare_internal_fast_move_to_destination(z_feedrate);
+      prepare_internal_fast_move_to_destination(fr_z);
     }
 
   #else
@@ -418,23 +427,18 @@ void do_blocking_move_to(const float rx, const float ry, const float rz, const f
     // If Z needs to raise, do it before moving XY
     if (current_position.z < rz) {
       current_position.z = rz;
-      line_to_current_position(z_feedrate);
+      line_to_current_position(fr_z);
     }
 
     current_position.set(rx, ry);
-    line_to_current_position(xy_feedrate);
+    line_to_current_position(fr_xy);
 
     // If Z needs to lower, do it after moving XY
     if (current_position.z > rz) {
       current_position.z = rz;
-      line_to_current_position(z_feedrate);
+      line_to_current_position(fr_z);
     }
-
   #endif
-
-  if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("<<< do_blocking_move_to");
-
-  planner.synchronize();
 }
 
 void do_blocking_move_to(const xy_pos_t &raw, const feedRate_t &fr_mm_s/*=0.0f*/) {
@@ -483,8 +487,10 @@ void remember_feedrate_scaling_off() {
   feedrate_percentage = 100;
 }
 void restore_feedrate_and_scaling() {
-  feedrate_mm_s = saved_feedrate_mm_s;
-  feedrate_percentage = saved_feedrate_percentage;
+  if (feedrate_percentage == 100) {
+    feedrate_mm_s = saved_feedrate_mm_s;
+    feedrate_percentage = saved_feedrate_percentage;
+  }
 }
 
 #if HAS_SOFTWARE_ENDSTOPS
@@ -736,7 +742,7 @@ void restore_feedrate_and_scaling() {
       thermalManager.manage_heater();  // This returns immediately if not really needed.
       if (ELAPSED(millis(), next_idle_ms)) {
         next_idle_ms = millis() + 200UL;
-        idle();
+        idle(false);
       }
 
       raw += segment_distance;
@@ -814,7 +820,7 @@ void restore_feedrate_and_scaling() {
         thermalManager.manage_heater();  // This returns immediately if not really needed.
         if (ELAPSED(millis(), next_idle_ms)) {
           next_idle_ms = millis() + 200UL;
-          idle();
+          idle(false);
         }
         raw += segment_distance;
         if (!planner.buffer_line(raw, fr_mm_s, active_extruder, cartesian_segment_mm
@@ -1235,7 +1241,11 @@ feedRate_t get_homing_bump_feedrate(const AxisEnum axis) {
 /**
  * Home an individual linear axis
  */
-void do_homing_move(const AxisEnum axis, const float distance, const feedRate_t fr_mm_s=0.0) {
+void do_homing_move(const AxisEnum axis, const float distance, const feedRate_t fr_mm_s=0.0 
+  #if ENABLED(MOVE_BACK_BEFORE_HOMING)
+    , bool can_move_back_before_homing = true
+  #endif
+) {
 
   if (DEBUGGING(LEVELING)) {
     DEBUG_ECHOPAIR(">>> do_homing_move(", axis_codes[axis], ", ", distance, ", ");
@@ -1283,7 +1293,7 @@ void do_homing_move(const AxisEnum axis, const float distance, const feedRate_t 
   const feedRate_t real_fr_mm_s = fr_mm_s ?: homing_feedrate(axis);
 
   #if ENABLED(MOVE_BACK_BEFORE_HOMING)
-  if ((axis == X_AXIS) || (axis == Y_AXIS))
+  if (can_move_back_before_homing && ((axis == X_AXIS) || (axis == Y_AXIS)))
   {
     abce_pos_t target = { planner.get_axis_position_mm(A_AXIS), planner.get_axis_position_mm(B_AXIS), planner.get_axis_position_mm(C_AXIS), planner.get_axis_position_mm(E_AXIS) };
     target[axis] = 0;
@@ -1443,6 +1453,9 @@ void set_axis_is_not_at_home(const AxisEnum axis) {
   #endif
 }
 
+// declare function used by homeaxis
+static float homeaxis_single_run(const AxisEnum axis, const int axis_home_dir);
+
 /**
  * Home an individual "raw axis" to its endstop.
  * This applies to XYZ on Cartesian and Core robots, and
@@ -1489,9 +1502,31 @@ void homeaxis(const AxisEnum axis) {
     home_dir(axis)
   );
 
+  #ifdef HOMING_MAX_ATTEMPTS
+    float probe_offset;
+
+    for (size_t i = 0; i < HOMING_MAX_ATTEMPTS; ++i) {
+      probe_offset = homeaxis_single_run(axis, axis_home_dir) * static_cast<float>(axis_home_dir);
+      if (axis_home_min_diff[axis] <= probe_offset && probe_offset <= axis_home_max_diff[axis] ) return; // OK offset in range
+      if(planner.draining()) return; // Return if we have called quick stop during homing, we don't want to cause homing error
+    }
+    
+    kill(GET_TEXT(MSG_ERR_HOMING)); // not OK run out attempts
+  #else // HOMING_MAX_ATTEMPTS 
+    homeaxis_single_run(axis, axis_home_dir);
+  #endif // HOMING_MAX_ATTEMPTS
+}
+
+/**
+ * home axis and
+ * return distance between fast and slow probe
+ */
+static float homeaxis_single_run(const AxisEnum axis, const int axis_home_dir) {
+  int steps;
+
   // Homing Z towards the bed? Deploy the Z probe or endstop.
   #if HOMING_Z_WITH_PROBE
-    if (axis == Z_AXIS && DEPLOY_PROBE()) return;
+    if (axis == Z_AXIS && DEPLOY_PROBE()) return NAN;
   #endif
 
   // Set flags for X, Y, Z motor locking
@@ -1515,7 +1550,7 @@ void homeaxis(const AxisEnum axis) {
   if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("Home 1 Fast:");
 
   #if HOMING_Z_WITH_PROBE && ENABLED(BLTOUCH)
-    if (axis == Z_AXIS && bltouch.deploy()) return; // The initial DEPLOY
+    if (axis == Z_AXIS && bltouch.deploy()) return NAN; // The initial DEPLOY
   #endif
 
   do_homing_move(axis, 1.5f * max_length(
@@ -1526,6 +1561,8 @@ void homeaxis(const AxisEnum axis) {
     #endif
     ) * axis_home_dir
   );
+
+  steps = stepper.position_from_startup(axis);
 
   #if HOMING_Z_WITH_PROBE && ENABLED(BLTOUCH) && DISABLED(BLTOUCH_HS_MODE)
     if (axis == Z_AXIS) bltouch.stow(); // Intermediate STOW (in LOW SPEED MODE)
@@ -1546,17 +1583,23 @@ void homeaxis(const AxisEnum axis) {
     do_homing_move(axis, -bump
       #if HOMING_Z_WITH_PROBE
         , MMM_TO_MMS(axis == Z_AXIS ? Z_PROBE_SPEED_FAST : 0)
-      #endif
+      #else
+        , 0
+      #endif // HOMING_Z_WITH_PROBE
+      #if ENABLED(MOVE_BACK_BEFORE_HOMING)
+        , false
+      #endif // ENABLED(MOVE_BACK_BEFORE_HOMING)
     );
 
     // Slow move towards endstop until triggered
     if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("Home 2 Slow:");
 
     #if HOMING_Z_WITH_PROBE && ENABLED(BLTOUCH) && DISABLED(BLTOUCH_HS_MODE)
-      if (axis == Z_AXIS && bltouch.deploy()) return; // Intermediate DEPLOY (in LOW SPEED MODE)
+      if (axis == Z_AXIS && bltouch.deploy()) return NAN; // Intermediate DEPLOY (in LOW SPEED MODE)
     #endif
     MINDA_BROKEN_CABLE_DETECTION__POST_ZHOME_0();
     do_homing_move(axis, 2 * bump, get_homing_bump_feedrate(axis));
+    steps -= stepper.position_from_startup(axis);
 
     #if HOMING_Z_WITH_PROBE && ENABLED(BLTOUCH)
       if (axis == Z_AXIS) bltouch.stow(); // The final STOW
@@ -1661,6 +1704,10 @@ void homeaxis(const AxisEnum axis) {
     }
   #endif
 
+    // Check if any of the moves were aborted and avoid setting any state
+    if (planner.draining())
+      return NAN;
+
   #if IS_SCARA
 
     set_axis_is_at_home(axis);
@@ -1675,7 +1722,7 @@ void homeaxis(const AxisEnum axis) {
     // retrace by the amount specified in delta_endstop_adj + additional dist in order to have minimum steps
     if (delta_endstop_adj[axis] * Z_HOME_DIR <= 0) {
       if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("delta_endstop_adj:");
-      do_homing_move(axis, delta_endstop_adj[axis] - (MIN_STEPS_PER_SEGMENT + 1) * planner.steps_to_mm[axis] * Z_HOME_DIR);
+      do_homing_move(axis, delta_endstop_adj[axis] - (MIN_STEPS_PER_SEGMENT + 1) * planner.mm_per_step[axis] * Z_HOME_DIR);
     }
 
   #else // CARTESIAN / CORE
@@ -1691,7 +1738,7 @@ void homeaxis(const AxisEnum axis) {
 
   // Put away the Z probe
   #if HOMING_Z_WITH_PROBE
-    if (axis == Z_AXIS && STOW_PROBE()) return;
+    if (axis == Z_AXIS && STOW_PROBE()) return NAN;
   #endif
 
   #ifdef HOMING_BACKOFF_MM
@@ -1721,6 +1768,8 @@ void homeaxis(const AxisEnum axis) {
 
   if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPAIR("<<< homeaxis(", axis_codes[axis], ")");
 
+  if (bump) return static_cast<float>(steps) * planner.mm_per_step[axis];
+  return 0; //no bump == no second sample == 0 offset
 } // homeaxis()
 
 #if HAS_WORKSPACE_OFFSET

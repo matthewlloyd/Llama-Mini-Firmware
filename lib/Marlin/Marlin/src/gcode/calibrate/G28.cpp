@@ -80,10 +80,14 @@ static inline void MINDA_BROKEN_CABLE_DETECTION__END() {}
       #endif
     ;
 
-    const float mlx = max_length(X_AXIS),
-                mly = max_length(Y_AXIS),
-                mlratio = mlx > mly ? mly / mlx : mlx / mly,
-                fr_mm_s = _MIN(homing_feedrate(X_AXIS), homing_feedrate(Y_AXIS)) * SQRT(sq(mlratio) + 1.0);
+    const float speed_ratio = homing_feedrate(X_AXIS) / homing_feedrate(Y_AXIS);
+    const float speed_ratio_inv = homing_feedrate(Y_AXIS) / homing_feedrate(X_AXIS);
+    const float length_ratio = max_length(X_AXIS) / max_length(Y_AXIS);
+    const bool length_r_less_than_speed_r = length_ratio < speed_ratio;
+
+    const float mlx = length_r_less_than_speed_r ? (max_length(Y_AXIS) * speed_ratio) : (max_length(X_AXIS));
+    const float mly = length_r_less_than_speed_r ? (max_length(Y_AXIS)) : (max_length(X_AXIS) * speed_ratio_inv);
+    const float fr_mm_s = SQRT(sq(homing_feedrate(X_AXIS)) + sq(homing_feedrate(Y_AXIS)));
 
     #if ENABLED(SENSORLESS_HOMING)
       sensorless_t stealth_states {
@@ -192,6 +196,21 @@ static inline void MINDA_BROKEN_CABLE_DETECTION__END() {}
  *
  */
 void GcodeSuite::G28(const bool always_home_all) {
+  bool S = false;
+  #if ENABLED(MARLIN_DEV_MODE)
+    S = parser.seen('S')
+  #endif
+
+  bool O = parser.boolval('O');
+  bool X = parser.seen('X');
+  bool Y = parser.seen('Y');
+  bool Z = parser.seen('Z');
+  float R = parser.seenval('R') ? parser.value_linear_units() : Z_HOMING_HEIGHT;
+
+  G28_no_parser(always_home_all, O, R, S, X, Y, Z);
+}
+
+void GcodeSuite::G28_no_parser(bool always_home_all, bool O, float R, bool S, bool X, bool Y,bool Z) {
   MINDA_BROKEN_CABLE_DETECTION__BEGIN();
   if (DEBUGGING(LEVELING)) {
     DEBUG_ECHOLNPGM(">>> G28");
@@ -204,7 +223,7 @@ void GcodeSuite::G28(const bool always_home_all) {
   #endif
 
   #if ENABLED(MARLIN_DEV_MODE)
-    if (parser.seen('S')) {
+    if (S) {
       LOOP_XYZ(a) set_axis_is_at_home((AxisEnum)a);
       sync_plan_position();
       SERIAL_ECHOLNPGM("Simulated Homing");
@@ -214,27 +233,7 @@ void GcodeSuite::G28(const bool always_home_all) {
     }
   #endif
 
-  #ifdef PRINTER_PRUSA_MINI
-    // -- X & Y coords default position
-    current_position.set(X_HOME_POS, Y_HOME_POS);
-    constexpr const int X_home = X_HOME_DIR > 0 ? X_MAX_POS : X_MIN_POS;
-    constexpr const int Y_home = Y_HOME_DIR > 0 ? Y_MAX_POS : Y_MIN_POS;
-
-    float d;
-    d = (LOGICAL_TO_NATIVE(X_home, X_AXIS) - current_position[X_AXIS]);
-    if (!NEAR_ZERO(d)) {
-      position_shift[X_AXIS] += d;
-      update_workspace_offset(X_AXIS);
-    }
-    d = (LOGICAL_TO_NATIVE(Y_home, Y_AXIS) - current_position[Y_AXIS]);
-    if (!NEAR_ZERO(d)) {
-      position_shift[Y_AXIS] += d;
-      update_workspace_offset(Y_AXIS);
-    }
-    sync_plan_position();
-  #endif
-
-  if (!homing_needed() && parser.boolval('O')) {
+  if (!homing_needed() && O) {
     if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("> homing not needed, skip\n<<< G28");
     return;
   }
@@ -297,7 +296,7 @@ void GcodeSuite::G28(const bool always_home_all) {
 
   #else // NOT DELTA
 
-    const bool homeX = parser.seen('X'), homeY = parser.seen('Y'), homeZ = parser.seen('Z'),
+    const bool homeX = X, homeY = Y, homeZ = Z,
                home_all = always_home_all || (homeX == homeY && homeX == homeZ),
                doX = home_all || homeX, doY = home_all || homeY, doZ = home_all || homeZ;
 
@@ -313,7 +312,7 @@ void GcodeSuite::G28(const bool always_home_all) {
       #if ENABLED(UNKNOWN_Z_NO_RAISE)
         !TEST(axis_known_position, Z_AXIS) ? 0 :
       #endif
-          (parser.seenval('R') ? parser.value_linear_units() : Z_HOMING_HEIGHT)
+          isnan(R) ? Z_HOMING_HEIGHT : R
     );
 
     if (z_homing_height && (doX || doY)) {

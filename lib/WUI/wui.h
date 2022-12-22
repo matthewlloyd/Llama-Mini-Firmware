@@ -9,23 +9,18 @@
 #ifndef SRC_WUI_WUI_H_
 #define SRC_WUI_WUI_H_
 
-#include <marlin_vars.h>
-#include "cmsis_os.h"
-#include "wui_config.h"
-
-#define BUDDY_WEB_STACK_SIZE 1024
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-extern osMutexId wui_thread_mutex_id;
+void start_network_task();
 
-/*!****************************************************************************
-* \brief Webserver thread function
-*
-*****************************************************************************/
-void StartWebServerTask(void const *argument);
+// TODO: Less colliding names? Or C++ namespace and such?
+void notify_ethernet_data();
+void notify_esp_data();
+void notify_reconfigure();
 
 #ifdef __cplusplus
 }

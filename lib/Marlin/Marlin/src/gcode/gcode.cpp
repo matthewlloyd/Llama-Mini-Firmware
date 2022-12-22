@@ -25,12 +25,15 @@
  *             Most will migrate to classes, by feature.
  */
 
+// clang-format off
+
 #include "gcode.h"
 GcodeSuite gcode;
 
 #include "parser.h"
 #include "queue.h"
 #include "../module/motion.h"
+#include "../module/planner.h"
 
 #if ENABLED(PRINTCOUNTER)
   #include "../module/printcounter.h"
@@ -152,7 +155,7 @@ void GcodeSuite::get_destination_from_command() {
  */
 void GcodeSuite::dwell(millis_t time) {
   time += millis();
-  while (PENDING(millis(), time)) idle();
+  while (!planner.draining() && PENDING(millis(), time)) idle(true);
 }
 
 /**
