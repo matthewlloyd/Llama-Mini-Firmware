@@ -147,7 +147,7 @@ screen_printing_data_t::screen_printing_data_t()
     w_etime_label.SetPadding({ 0, 2, 0, 2 });
     w_etime_label.SetText(_("Remaining Time"));
 
-    w_etime_value.font = resource_font(IDR_FNT_SMALL);
+    w_etime_value.font = resource_font(IDR_FNT_NORMAL);
     w_etime_value.SetAlignment(ALIGN_RIGHT_BOTTOM);
     w_etime_value.SetPadding({ 0, 2, 0, 2 });
     // this MakeRAM is safe - text_etime is allocated in RAM for the lifetime of pw
@@ -158,7 +158,7 @@ screen_printing_data_t::screen_printing_data_t()
     w_time_label.SetPadding({ 0, 2, 0, 2 });
     w_time_label.SetText(_("Printing time"));
 
-    w_time_value.font = resource_font(IDR_FNT_SMALL);
+    w_time_value.font = resource_font(IDR_FNT_NORMAL);
     w_time_value.SetAlignment(ALIGN_RIGHT_BOTTOM);
     w_time_value.SetPadding({ 0, 2, 0, 2 });
     // this MakeRAM is safe - text_time_dur is allocated in RAM for the lifetime of pw
