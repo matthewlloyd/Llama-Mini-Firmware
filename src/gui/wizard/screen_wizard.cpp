@@ -129,18 +129,18 @@ WizardState_t StateFnc_START() {
 #ifdef _DEBUG
     const PhaseResponses &resp = Responses_IgnoreYesNo;
 #else  //_DEBUG
-    const PhaseResponses &resp = Responses_YesNo;
+    const PhaseResponses &resp = Responses_IgnoreYesNo;
 #endif //_DEBUG
 
     //IDR_PNG_icon_pepa
     switch (MsgBoxPepa(translatedText, resp)) {
-#ifdef _DEBUG
+//#ifdef _DEBUG
     case Response::Ignore:
         eeprom_set_var(EEVAR_RUN_SELFTEST, variant8_ui8(0)); // clear selftest flag
         eeprom_set_var(EEVAR_RUN_XYZCALIB, variant8_ui8(0)); // clear XYZ calib flag
         eeprom_set_var(EEVAR_RUN_FIRSTLAY, variant8_ui8(0)); // clear first layer flag
         return WizardState_t::EXIT;
-#endif //_DEBUG
+//#endif //_DEBUG
     case Response::Yes:
         return WizardState_t::next;
     case Response::No:
