@@ -119,9 +119,9 @@ screen_printing_data_t::screen_printing_data_t()
     , w_filename(this, Rect16(10, 33, 220, 29))
     , w_progress(this, { 10, 70 }, HasNumber_t::yes)
     , w_time_label(this, Rect16(10, 128, 101, 20), is_multiline::no)
-    , w_time_value(this, Rect16(10, 148, 101, 20), is_multiline::no)
+    , w_time_value(this, Rect16(10, 158, 101, 20), is_multiline::no)
     , w_etime_label(this, Rect16(130, 128, 101, 20), is_multiline::no)
-    , w_etime_value(this, Rect16(30, 148, 201, 20), is_multiline::no)
+    , w_etime_value(this, Rect16(30, 158, 201, 20), is_multiline::no)
     , last_print_duration(-1)
     , last_time_to_end(-1)
     , message_timer(0)
@@ -147,7 +147,7 @@ screen_printing_data_t::screen_printing_data_t()
     w_etime_label.SetPadding({ 0, 2, 0, 2 });
     w_etime_label.SetText(_("Remaining Time"));
 
-    w_etime_value.font = resource_font(IDR_FNT_SMALL);
+    w_etime_value.font = resource_font(IDR_FNT_NORMAL);
     w_etime_value.SetAlignment(ALIGN_RIGHT_BOTTOM);
     w_etime_value.SetPadding({ 0, 2, 0, 2 });
     // this MakeRAM is safe - text_etime is allocated in RAM for the lifetime of pw
@@ -158,7 +158,7 @@ screen_printing_data_t::screen_printing_data_t()
     w_time_label.SetPadding({ 0, 2, 0, 2 });
     w_time_label.SetText(_("Printing time"));
 
-    w_time_value.font = resource_font(IDR_FNT_SMALL);
+    w_time_value.font = resource_font(IDR_FNT_NORMAL);
     w_time_value.SetAlignment(ALIGN_RIGHT_BOTTOM);
     w_time_value.SetPadding({ 0, 2, 0, 2 });
     // this MakeRAM is safe - text_time_dur is allocated in RAM for the lifetime of pw
